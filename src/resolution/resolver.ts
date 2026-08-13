@@ -306,7 +306,24 @@ export function scorePair(a: PairCandidate, b: PairCandidate): PairScoreResult {
       ? contributions.reduce((sum, c) => sum + c.weight * c.value, 0) / totalWeight
       : 0;
 
-  return { score, matchedSignals, confidence: classifyBand(score) };
+  const domainAvailable = Boolean(domainA && domainB);
+  const rawBand = classifyBand(score);
+  // Domain carries the DOMINANT weight specifically because an identical
+  // domain is near-certain proof of common ownership (spec §8.1). The
+  // inverse also holds: without ANY domain signal to corroborate, name
+  // similarity alone (even boosted by embedding/person) is not reliable
+  // enough to silently auto-merge — a company name that happens to be a
+  // literal prefix of another's (e.g. "DevTools" / "DevToolsPro") can
+  // otherwise cross the auto-merge threshold on name+embedding alone. When
+  // domain could not be compared (missing or excluded generic-hosting on
+  // either side), cap confidence at 'uncertain' so the merge still happens
+  // but is visibly flagged, never silent. This was found and fixed via this
+  // phase's golden test (see tests/golden/entity-resolution.golden.test.ts,
+  // pair-19).
+  const confidence: MatchConfidence =
+    !domainAvailable && rawBand === 'auto' ? 'uncertain' : rawBand;
+
+  return { score, matchedSignals, confidence };
 }
 
 // ---------------------------------------------------------------------------

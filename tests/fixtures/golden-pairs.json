@@ -1,0 +1,429 @@
+[
+  {
+    "id": "pair-01-legal-suffix-and-source-variant",
+    "shouldMatch": true,
+    "note": "GitHub-shaped legal-suffix record vs HN-shaped no-domain record, same company.",
+    "a": {
+      "canonicalName": "Acme, Inc.",
+      "domain": "acme.com",
+      "description": "AI-powered widget analytics platform for logistics teams"
+    },
+    "b": {
+      "canonicalName": "Acme AI",
+      "description": "AI powered widget analytics for logistics operations teams"
+    }
+  },
+  {
+    "id": "pair-02-domain-only-vs-legal-name",
+    "shouldMatch": true,
+    "note": "RSS-shaped domain-derived name vs GitHub legal name, identical domain.",
+    "a": {
+      "canonicalName": "acme.com",
+      "domain": "acme.com",
+      "description": "widget analytics for logistics"
+    },
+    "b": {
+      "canonicalName": "Acme, Inc.",
+      "domain": "www.acme.com",
+      "description": "widget analytics for logistics teams"
+    }
+  },
+  {
+    "id": "pair-03-llc-suffix-stripped",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "TechFlow LLC",
+      "domain": "techflow.io",
+      "description": "workflow automation for finance teams"
+    },
+    "b": {
+      "canonicalName": "TechFlow",
+      "domain": "techflow.io",
+      "description": "workflow automation software for finance"
+    }
+  },
+  {
+    "id": "pair-04-accented-name-sa-suffix",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "Café Analytics S.A.",
+      "domain": "cafeanalytics.com",
+      "description": "point of sale analytics for coffee shops"
+    },
+    "b": {
+      "canonicalName": "Cafe Analytics",
+      "domain": "cafeanalytics.com",
+      "description": "point-of-sale analytics for coffee shop chains"
+    }
+  },
+  {
+    "id": "pair-05-inc-suffix-domain-match",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "DataPeak Inc.",
+      "domain": "datapeak.ai",
+      "description": "observability platform for data pipelines"
+    },
+    "b": {
+      "canonicalName": "DataPeak",
+      "domain": "datapeak.ai",
+      "description": "observability for data pipelines and warehouses"
+    }
+  },
+  {
+    "id": "pair-06-domain-only-vs-name-only",
+    "shouldMatch": true,
+    "note": "one side has domain but generic name, other has no domain but rich description overlap.",
+    "a": {
+      "canonicalName": "Loglane",
+      "domain": "loglane.com",
+      "description": "structured logging and tracing for microservices"
+    },
+    "b": {
+      "canonicalName": "Loglane Analytics",
+      "description": "structured logging tracing microservices observability"
+    }
+  },
+  {
+    "id": "pair-07-ltd-suffix",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "Nimbus Robotics Ltd",
+      "domain": "nimbusrobotics.com",
+      "description": "warehouse picking robots"
+    },
+    "b": {
+      "canonicalName": "Nimbus Robotics",
+      "domain": "nimbusrobotics.com",
+      "description": "autonomous warehouse picking robots"
+    }
+  },
+  {
+    "id": "pair-08-srl-suffix",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "GreenGrid S.R.L.",
+      "domain": "greengrid.energy",
+      "description": "residential solar battery scheduling"
+    },
+    "b": {
+      "canonicalName": "GreenGrid",
+      "domain": "greengrid.energy",
+      "description": "solar battery scheduling for homes"
+    }
+  },
+  {
+    "id": "pair-09-gmbh-suffix",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "PixelForge GmbH",
+      "domain": "pixelforge.dev",
+      "description": "collaborative design tool for game artists"
+    },
+    "b": {
+      "canonicalName": "PixelForge",
+      "domain": "pixelforge.dev",
+      "description": "collaborative design tooling for game artists"
+    }
+  },
+  {
+    "id": "pair-10-shared-person-no-domain-on-one-side",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "Northwind Labs",
+      "domain": "northwind.dev",
+      "description": "developer tooling for API testing",
+      "people": ["Sam Rivera"]
+    },
+    "b": {
+      "canonicalName": "Northwind Labs Inc",
+      "description": "developer tools for API testing and mocking",
+      "people": ["Sam Rivera"]
+    }
+  },
+  {
+    "id": "pair-11-www-prefix-stripped",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "Quanta Health",
+      "domain": "quantahealth.io",
+      "description": "remote patient monitoring platform"
+    },
+    "b": {
+      "canonicalName": "Quanta Health, Inc.",
+      "domain": "www.quantahealth.io",
+      "description": "remote patient monitoring for clinics"
+    }
+  },
+  {
+    "id": "pair-12-case-variation-domain-match",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "BrightPath Robotics",
+      "domain": "brightpath.ai",
+      "description": "agricultural harvesting robots"
+    },
+    "b": {
+      "canonicalName": "Brightpath robotics",
+      "domain": "brightpath.ai",
+      "description": "autonomous agricultural harvesting robots"
+    }
+  },
+  {
+    "id": "pair-13-shared-person-both-suffix-variants",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "Solace Systems",
+      "description": "customer support ticketing for SMBs",
+      "people": ["Maria Chen"]
+    },
+    "b": {
+      "canonicalName": "Solace Systems Inc",
+      "description": "support ticketing software for small businesses",
+      "people": ["Maria Chen"]
+    }
+  },
+  {
+    "id": "pair-14-llc-www-domain",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "Vertex Dynamics",
+      "domain": "vertexdynamics.io",
+      "description": "physics simulation engine for game studios"
+    },
+    "b": {
+      "canonicalName": "Vertex Dynamics, LLC",
+      "domain": "www.vertexdynamics.io",
+      "description": "physics simulation for game studios"
+    }
+  },
+  {
+    "id": "pair-15-inc-suffix-domain-match-again",
+    "shouldMatch": true,
+    "a": {
+      "canonicalName": "Orbital Fauna",
+      "domain": "orbitalfauna.com",
+      "description": "wildlife tracking sensors for conservation"
+    },
+    "b": {
+      "canonicalName": "Orbital Fauna Inc",
+      "domain": "orbitalfauna.com",
+      "description": "wildlife tracking sensor network for conservation"
+    }
+  },
+  {
+    "id": "pair-16-shared-prefix-different-domain-plumbing-vs-robotics",
+    "shouldMatch": false,
+    "note": "Classic near-name collision (spec example category): shares blocking prefix, unrelated businesses.",
+    "a": {
+      "canonicalName": "Acme Plumbing",
+      "domain": "acmeplumbing.com",
+      "description": "residential plumbing repair and installation"
+    },
+    "b": {
+      "canonicalName": "Acme Robotics",
+      "domain": "acmerobotics.io",
+      "description": "industrial welding robots for automotive plants"
+    }
+  },
+  {
+    "id": "pair-17-vercel-vs-verceld",
+    "shouldMatch": false,
+    "note": "Explicit spec example: deliberately-similar-but-different company name.",
+    "a": {
+      "canonicalName": "Vercel",
+      "domain": "vercel.com",
+      "description": "frontend cloud platform for deploying web apps"
+    },
+    "b": {
+      "canonicalName": "Verceld",
+      "domain": "verceld.io",
+      "description": "veterinary clinic scheduling software"
+    }
+  },
+  {
+    "id": "pair-18-nimbus-robotics-vs-nimbus-cloud",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "Nimbus Robotics",
+      "domain": "nimbusrobotics.com",
+      "description": "warehouse picking robots"
+    },
+    "b": {
+      "canonicalName": "Nimbus Cloud",
+      "domain": "nimbuscloud.io",
+      "description": "managed Kubernetes hosting for startups"
+    }
+  },
+  {
+    "id": "pair-19-both-generic-hosting-domains-excluded",
+    "shouldMatch": false,
+    "note": "Both domains are generic hosting subdomains (excluded), so domain signal is unavailable on both sides; different products.",
+    "a": {
+      "canonicalName": "DevTools",
+      "domain": "devtools-demo.github.io",
+      "description": "browser extension for inspecting REST API calls"
+    },
+    "b": {
+      "canonicalName": "DevToolsPro",
+      "domain": "devtoolspro.vercel.app",
+      "description": "invoice generator for freelance designers"
+    }
+  },
+  {
+    "id": "pair-20-quanta-health-vs-quanta-finance",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "Quanta Health",
+      "domain": "quantahealth.io",
+      "description": "remote patient monitoring platform"
+    },
+    "b": {
+      "canonicalName": "Quanta Finance",
+      "domain": "quantafinance.io",
+      "description": "small business bookkeeping automation"
+    }
+  },
+  {
+    "id": "pair-21-brightpath-robotics-vs-brightpath-media",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "BrightPath Robotics",
+      "domain": "brightpath.ai",
+      "description": "agricultural harvesting robots"
+    },
+    "b": {
+      "canonicalName": "BrightPath Media",
+      "domain": "brightpathmedia.io",
+      "description": "podcast production and distribution studio"
+    }
+  },
+  {
+    "id": "pair-22-solstice-labs-vs-solstice-robotics",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "Solstice Labs",
+      "domain": "solsticelabs.com",
+      "description": "clinical trial data management software"
+    },
+    "b": {
+      "canonicalName": "Solstice Robotics",
+      "domain": "solsticerobotics.io",
+      "description": "drone inspection for solar farms"
+    }
+  },
+  {
+    "id": "pair-23-loglane-vs-loglabs",
+    "shouldMatch": false,
+    "note": "Shares the name-prefix-4 blocking key ('logl') and the leading trigrams, but is a different company.",
+    "a": {
+      "canonicalName": "Loglane",
+      "domain": "loglane.com",
+      "description": "structured logging and tracing for microservices"
+    },
+    "b": {
+      "canonicalName": "Loglabs",
+      "domain": "loglabs.io",
+      "description": "payroll and benefits administration for remote teams"
+    }
+  },
+  {
+    "id": "pair-24-pixelforge-vs-pixelworks",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "PixelForge",
+      "domain": "pixelforge.dev",
+      "description": "collaborative design tool for game artists"
+    },
+    "b": {
+      "canonicalName": "PixelWorks",
+      "domain": "pixelworks.io",
+      "description": "3D printing marketplace for hobbyists"
+    }
+  },
+  {
+    "id": "pair-25-northwind-labs-vs-northwind-realty",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "Northwind Labs",
+      "domain": "northwind.dev",
+      "description": "developer tooling for API testing"
+    },
+    "b": {
+      "canonicalName": "Northwind Realty",
+      "domain": "northwindrealty.com",
+      "description": "residential real estate listing platform"
+    }
+  },
+  {
+    "id": "pair-26-greengrid-vs-greengrid-foods",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "GreenGrid",
+      "domain": "greengrid.energy",
+      "description": "residential solar battery scheduling"
+    },
+    "b": {
+      "canonicalName": "GreenGrid Foods",
+      "domain": "greengridfoods.com",
+      "description": "vertical farming produce delivery subscription"
+    }
+  },
+  {
+    "id": "pair-27-datapeak-vs-datapeak-realty",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "DataPeak",
+      "domain": "datapeak.ai",
+      "description": "observability platform for data pipelines"
+    },
+    "b": {
+      "canonicalName": "DataPeak Realty",
+      "domain": "datapeakrealty.com",
+      "description": "commercial real estate brokerage analytics"
+    }
+  },
+  {
+    "id": "pair-28-orbital-fauna-vs-orbital-systems",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "Orbital Fauna",
+      "domain": "orbitalfauna.com",
+      "description": "wildlife tracking sensors for conservation"
+    },
+    "b": {
+      "canonicalName": "Orbital Systems",
+      "domain": "orbitalsystems.io",
+      "description": "satellite ground station scheduling software"
+    }
+  },
+  {
+    "id": "pair-29-techflow-vs-techflow-media",
+    "shouldMatch": false,
+    "a": {
+      "canonicalName": "TechFlow",
+      "domain": "techflow.io",
+      "description": "workflow automation for finance teams"
+    },
+    "b": {
+      "canonicalName": "TechFlow Media",
+      "domain": "techflowmedia.com",
+      "description": "video editing services for YouTube creators"
+    }
+  },
+  {
+    "id": "pair-30-totally-unrelated-no-shared-signal",
+    "shouldMatch": false,
+    "note": "Sanity check: no shared blocking key at all, should score near zero.",
+    "a": {
+      "canonicalName": "Solace Systems",
+      "domain": "solacesystems.com",
+      "description": "customer support ticketing for SMBs"
+    },
+    "b": {
+      "canonicalName": "Zephyr Freight",
+      "domain": "zephyrfreight.io",
+      "description": "long-haul trucking dispatch optimization"
+    }
+  }
+]

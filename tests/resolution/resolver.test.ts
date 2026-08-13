@@ -246,6 +246,27 @@ describe('scorePair', () => {
     const weights = Object.values(PAIR_SCORE_WEIGHTS);
     expect(PAIR_SCORE_WEIGHTS.domain).toBe(Math.max(...weights));
   });
+
+  it('never reaches auto confidence without a domain signal, even when the raw weighted score would clear the auto threshold', () => {
+    // "DevTools" is a literal prefix of "DevToolsPro" — high name similarity
+    // — and both sides share an embedding, but NEITHER has a comparable
+    // domain (missing on both). Without domain corroboration, this must cap
+    // at 'uncertain', never silently auto-merge.
+    const sharedEmbedding = [1, 1, 0];
+    const result = scorePair(
+      { canonicalName: 'DevTools', embedding: sharedEmbedding },
+      { canonicalName: 'DevToolsPro', embedding: sharedEmbedding },
+    );
+    expect(result.confidence).not.toBe('auto');
+  });
+
+  it('reaches auto confidence when domain matches, even though it would also reach auto without the cap', () => {
+    const result = scorePair(
+      { canonicalName: 'Acme Corp', domain: 'acme.com' },
+      { canonicalName: 'Acme Corp', domain: 'acme.com' },
+    );
+    expect(result.confidence).toBe('auto');
+  });
 });
 
 describe('classifyBand', () => {
