@@ -5,9 +5,12 @@ import { STAGES } from './entities.js';
 // ---------------------------------------------------------------------------
 // Thesis schema
 //
-// Shape: hard_filters.{stages, exclude_sectors}, soft_preferences.{sectors,
-// geos, keywords}, anti_patterns: string[], weights.{semantic, momentum,
-// keywords, recency}.
+// Shape (spec §8.2): name, description, hard_filters.{stages,
+// exclude_sectors}, soft_preferences.{sectors, geos, keywords},
+// anti_patterns: string[], weights.{semantic, momentum, keywords, recency}.
+// `.strict()` at the top level so a typo'd or unrecognized key fails loudly
+// instead of being silently dropped — this is operator-edited config, same
+// fail-fast rationale as the weights-sum check below.
 //
 // Weights sum-to-1 is enforced HERE, at parse time, rather than deferred to
 // use time (scoring). Rationale: a thesis YAML is operator-edited config,
@@ -49,12 +52,16 @@ const weightsSchema = z
     },
   );
 
-export const thesisSchema = z.object({
-  hard_filters: hardFiltersSchema,
-  soft_preferences: softPreferencesSchema,
-  anti_patterns: z.array(z.string()),
-  weights: weightsSchema,
-});
+export const thesisSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().min(1),
+    hard_filters: hardFiltersSchema,
+    soft_preferences: softPreferencesSchema,
+    anti_patterns: z.array(z.string()),
+    weights: weightsSchema,
+  })
+  .strict();
 
 export type Thesis = z.infer<typeof thesisSchema>;
 

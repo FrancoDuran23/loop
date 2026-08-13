@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { parseThesis, ThesisValidationError } from '../../src/domain/thesis.js';
 
 const VALID_THESIS_YAML = `
+name: "Dev tools B2B, etapa temprana"
+description: >
+  Invertimos en herramientas para desarrolladores con modelo B2B o
+  open-source-first, entre pre-seed y Serie A.
 hard_filters:
   stages: [seed, series-a]
   exclude_sectors: [gambling]
@@ -22,10 +26,27 @@ describe('parseThesis', () => {
   it('parses a valid thesis YAML into a typed Thesis object', () => {
     const thesis = parseThesis(VALID_THESIS_YAML);
 
+    expect(thesis.name).toBe('Dev tools B2B, etapa temprana');
+    expect(thesis.description).toContain('open-source-first');
     expect(thesis.hard_filters.stages).toEqual(['seed', 'series-a']);
     expect(thesis.hard_filters.exclude_sectors).toEqual(['gambling']);
     expect(thesis.soft_preferences.keywords).toEqual(['open-source', 'api-first']);
     expect(thesis.weights.semantic).toBe(0.4);
+  });
+
+  it('throws ThesisValidationError when name is missing', () => {
+    const missingName = VALID_THESIS_YAML.replace(
+      'name: "Dev tools B2B, etapa temprana"\n',
+      '',
+    );
+
+    expect(() => parseThesis(missingName)).toThrow(ThesisValidationError);
+  });
+
+  it('throws ThesisValidationError on an unrecognized top-level key', () => {
+    const extraKey = `${VALID_THESIS_YAML}\nunexpected_field: "should be rejected"\n`;
+
+    expect(() => parseThesis(extraKey)).toThrow(ThesisValidationError);
   });
 
   it('throws ThesisValidationError on malformed YAML syntax', () => {
