@@ -1,15 +1,13 @@
 // Pure domain types. Zero runtime logic, zero imports of infrastructure —
 // this file is type/interface declarations only.
 //
-// Field provenance note: design.md references a numbered author spec
-// (§4-§18) for exact field lists, but only the capability/scenario delta
-// spec and the proposal were retrievable from the artifact store at apply
-// time (no separate §-numbered document was persisted). Fields below are
-// derived from the scenarios in the source-ingestion, entity-resolution,
-// enrichment, thesis-scoring, persistence, and deals-api capabilities, plus
-// design.md's Ports section. Where a field is not pinned down by an
-// explicit scenario, the minimal defensible choice was made and is noted
-// inline.
+// Field shapes for SourceRecord/ExtractedCompany/Signal/Company/ScoredDeal
+// match spec §6 verbatim. A few fields beyond the §6 snippet are additive,
+// not contradictory, and exist to serve behavior the spec describes in
+// prose elsewhere: `Company.flags` carries the 'merge_incierto' visibility
+// requirement from §8.1, `Company.mergedInto` implements §8.1's "merge is
+// non-destructive and reversible", and `Company.oneLiner`/`people` support
+// the enrichment output described in §3. These are noted inline.
 
 // ---------------------------------------------------------------------------
 // Branded IDs — nominal typing over `string`, so e.g. a SourceRecordId can
@@ -31,34 +29,31 @@ export type RunId = string & { readonly __brand: 'RunId' };
 export type SourceName = 'github' | 'hackernews' | 'rss';
 
 // Investment stage vocabulary used by Thesis.hard_filters.stages and
-// Company/ExtractedCompany/EnrichmentResult.estimatedStage. No exhaustive
-// list was given in the retrievable spec text; this is the conventional
-// pre-seed -> growth VC stage ladder plus 'unknown' for sources that don't
-// expose a stage signal. Exported as a const tuple so thesis.ts can build a
+// Company.estimatedStage. Exported as a const tuple so thesis.ts can build a
 // Zod enum from the same single source of truth.
-export const STAGES = [
-  'pre-seed',
-  'seed',
-  'series-a',
-  'series-b',
-  'series-c-plus',
-  'growth',
-  'unknown',
-] as const;
+export const STAGES = ['pre-seed', 'seed', 'series-a', 'later', 'unknown'] as const;
 export type Stage = (typeof STAGES)[number];
 
 export type RunStatus = 'completed' | 'partial' | 'failed';
 
 // ---------------------------------------------------------------------------
 // Signals — every signal must be traceable and dated (spec: "A Signal MUST
-// NEVER be stored as a bare number without a date and source").
-// `kind` is kept as an open `string` (not a closed union) so a new source
-// adapter can introduce new signal kinds without touching domain/ (spec:
-// "New source requires no core-layer change").
+// NEVER be stored as a bare number without a date and source"). `kind` is a
+// closed union per spec §6 — adding a new signal kind is a deliberate
+// domain-level decision, not something a source adapter should be able to
+// introduce silently by typing an arbitrary string.
 // ---------------------------------------------------------------------------
 
+export type SignalKind =
+  | 'github_stars'
+  | 'github_stars_delta_30d'
+  | 'hn_points'
+  | 'hn_show'
+  | 'hiring'
+  | 'launch';
+
 export interface Signal {
-  readonly kind: string; // e.g. 'github_stars_delta_30d'
+  readonly kind: SignalKind;
   readonly value: number;
   readonly observedAt: string; // ISO 8601
   readonly source: SourceName;
@@ -74,20 +69,18 @@ export interface ExtractedCompany {
   readonly name: string;
   readonly domain?: string;
   readonly description?: string;
-  readonly url: string;
-  readonly stage?: Stage;
-  readonly sector?: string;
+  readonly url?: string;
   // Founder/contributor names — used as an entity-resolution pair-scoring
   // signal ("shared person in people").
   readonly people?: readonly string[];
-  readonly signals?: readonly Signal[];
+  readonly location?: string;
+  readonly signals: readonly Signal[];
 }
 
 export interface SourceRecord {
   readonly id: SourceRecordId;
   readonly source: SourceName;
   readonly sourceId: string; // native id in the source system; UNIQUE(source, sourceId)
-  readonly url: string;
   readonly fetchedAt: string; // ISO 8601
   readonly raw: unknown; // original payload, kept verbatim for provenance/replay
   readonly extracted: ExtractedCompany;
@@ -109,18 +102,22 @@ export interface MergeEvidence {
 
 export interface Company {
   readonly id: CompanyId;
-  readonly name: string;
+  readonly canonicalName: string;
   readonly domain?: string; // UNIQUE WHERE domain IS NOT NULL
   readonly description?: string;
   readonly sector?: string;
-  readonly stage?: Stage;
+  readonly estimatedStage?: Stage;
   readonly oneLiner?: string;
   readonly people?: readonly string[];
+  // Aggregated, deduped signal history across every merged SourceRecord —
+  // scoring's momentum component reads this, not a single source's signals.
+  readonly signals: readonly Signal[];
   readonly embedding?: readonly number[]; // 384-dim; ivfflat cosine index (Phase 5)
   // Traceability: every Company field must be traceable to >=1 SourceRecord.
   readonly memberRecordIds: readonly SourceRecordId[];
   readonly flags: readonly string[]; // e.g. ['merge_incierto']
   readonly firstSeenAt: string; // ISO 8601 — anchors the recency scoring component
+  readonly lastSeenAt: string; // ISO 8601 — most recent observation across all sources
   // Merge is non-destructive: an absorbed Company keeps its row and points
   // at its survivor rather than being deleted.
   readonly mergedInto?: CompanyId;
@@ -151,6 +148,7 @@ export interface ScoredDeal {
   readonly score: number; // 0-100
   readonly breakdown: ScoreBreakdown;
   readonly rationale: string;
+  readonly flags: readonly string[]; // e.g. ['fuera de geografía', 'etapa incierta']
 }
 
 // ---------------------------------------------------------------------------
