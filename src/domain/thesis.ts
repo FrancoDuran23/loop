@@ -43,10 +43,10 @@ const weightsSchema = z
     recency: z.number().min(0).max(1),
   })
   .refine(
-    (w) =>
-      Math.abs(w.semantic + w.momentum + w.keywords + w.recency - 1) <=
-      WEIGHT_SUM_TOLERANCE,
-    { message: `weights.semantic + momentum + keywords + recency must sum to 1 (±${WEIGHT_SUM_TOLERANCE})` },
+    (w) => Math.abs(w.semantic + w.momentum + w.keywords + w.recency - 1) <= WEIGHT_SUM_TOLERANCE,
+    {
+      message: `weights.semantic + momentum + keywords + recency must sum to 1 (±${WEIGHT_SUM_TOLERANCE})`,
+    },
   );
 
 export const thesisSchema = z.object({
