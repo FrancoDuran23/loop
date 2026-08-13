@@ -1,0 +1,129 @@
+// Domain ports (hexagonal boundary). Pure interfaces + DTOs only — this file
+// MUST NOT import infrastructure. The ESLint core-layer boundary rule
+// (eslint.config.js, design.md D1) machine-checks this for every file under
+// src/domain/**.
+//
+// Signatures below are copied verbatim from design.md's "Ports
+// (`src/domain/ports.ts`)" section (D2-D4) — not re-derived.
+//
+// Repository port count: design.md's D4 decision row names 5 segregated
+// ports (CompanyRepository, SourceRecordRepository, RunRepository,
+// ScoredDealRepository, DealReadModel) for ISP, but the code sample in that
+// same section only defines the shape of the first 4. The tasks artifact's
+// Phase 2.2 entry explicitly scopes this task to "all 4 repo ports".
+// DealReadModel's query/pagination shape is a deals-api (Phase 9) concern —
+// defining it now would mean inventing an untested shape ahead of the
+// actual GET /deals filter/cursor requirements. Deferred to Phase 9, where
+// it will be pinned by the real endpoint contract. This matches D4's own
+// rationale: "in-memory pipeline tests implement 4 small ports, not API
+// read models."
+
+import type {
+  Company,
+  CompanyId,
+  MergeEvidence,
+  RunId,
+  RunStats,
+  RunStatus,
+  ScoreBreakdown,
+  ScoredDeal,
+  Signal,
+  SourceName,
+  SourceRecord,
+  SourceRecordId,
+  Stage,
+} from './entities.js';
+import type { Thesis } from './thesis.js';
+
+// ---------------------------------------------------------------------------
+// Source ingestion
+// ---------------------------------------------------------------------------
+
+export interface SourcePage {
+  readonly records: readonly SourceRecord[];
+  readonly nextWatermark?: string; // opaque, per-source semantics
+}
+
+export interface FetchOptions {
+  readonly since?: string; // previous watermark
+  readonly limit: number;
+  readonly signal: AbortSignal;
+}
+
+export interface SourceAdapter {
+  readonly source: SourceName; // 'github' | 'hackernews' | 'rss'
+  fetch(opts: FetchOptions): AsyncIterable<SourcePage>;
+}
+
+// ---------------------------------------------------------------------------
+// Embeddings
+// ---------------------------------------------------------------------------
+
+export interface EmbeddingProvider {
+  readonly id: string; // 'local-minilm' | 'deterministic'
+  readonly dimensions: number; // asserted === 384 at startup
+  embed(texts: readonly string[]): Promise<readonly number[][]>; // batch
+}
+
+// ---------------------------------------------------------------------------
+// LLM (enrichment + rationale)
+// ---------------------------------------------------------------------------
+
+export interface EnrichmentRequest {
+  readonly name: string;
+  readonly description?: string;
+  readonly signals: readonly Signal[];
+}
+
+export interface EnrichmentResult {
+  readonly sector?: string;
+  readonly oneLiner?: string;
+  readonly estimatedStage?: Stage;
+  readonly confidence: number;
+}
+
+export interface RationaleRequest {
+  readonly company: Company;
+  readonly breakdown: ScoreBreakdown;
+  readonly thesis: Thesis;
+}
+
+export interface LlmProvider {
+  readonly id: string; // 'rules' | 'ollama'
+  enrich(req: EnrichmentRequest): Promise<EnrichmentResult>;
+  rationale(req: RationaleRequest): Promise<string>; // company + breakdown + thesis
+}
+
+// ---------------------------------------------------------------------------
+// Repositories
+// ---------------------------------------------------------------------------
+
+export interface CompanyRepository {
+  findByDomain(domain: string): Promise<Company | undefined>;
+  findByBlockingKeys(keys: readonly string[]): Promise<readonly Company[]>;
+  save(company: Company): Promise<void>; // idempotent upsert by id
+  linkSourceRecord(id: CompanyId, rec: SourceRecordId): Promise<void>;
+  appendSignals(id: CompanyId, signals: readonly Signal[]): Promise<void>;
+  setEmbedding(id: CompanyId, embedding: readonly number[]): Promise<void>;
+  merge(survivor: CompanyId, absorbed: CompanyId, ev: MergeEvidence): Promise<void>;
+}
+
+export interface SourceRecordRepository {
+  upsert(r: SourceRecord): Promise<{ readonly id: SourceRecordId; readonly isNew: boolean }>;
+  listByRun(
+    runId: RunId,
+    after: SourceRecordId | undefined,
+    limit: number,
+  ): Promise<readonly SourceRecord[]>;
+}
+
+export interface RunRepository {
+  start(id: RunId, thesis: string): Promise<void>;
+  watermark(source: SourceName): Promise<string | undefined>;
+  setWatermark(source: SourceName, w: string): Promise<void>;
+  finish(id: RunId, status: RunStatus, stats: RunStats): Promise<void>; // completed|partial|failed
+}
+
+export interface ScoredDealRepository {
+  saveAll(runId: RunId, d: readonly ScoredDeal[]): Promise<void>;
+}
