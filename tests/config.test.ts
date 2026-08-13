@@ -8,7 +8,12 @@ describe('loadConfig', () => {
     expect(config.LLM_PROVIDER).toBe('rules');
     expect(config.EMBEDDING_PROVIDER).toBe('local');
     expect(config.LOG_LEVEL).toBe('info');
-    expect(config.DATABASE_URL).toBeUndefined();
+    // Phase 5: DATABASE_URL defaults to the docker-compose.yml Postgres
+    // service's own credentials/port — required for the spec §18
+    // zero-config clean-machine bootstrap (no env vars set at all).
+    expect(config.DATABASE_URL).toBe(
+      'postgres://postgres:postgres@localhost:5432/deal_signal_engine',
+    );
     expect(config.GITHUB_TOKEN).toBeUndefined();
   });
 
