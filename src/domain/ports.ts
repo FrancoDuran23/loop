@@ -98,6 +98,20 @@ export interface LlmProvider {
 // Repositories
 // ---------------------------------------------------------------------------
 
+// IMPORTANT — merge is a redirect, not a union: after merge(survivor,
+// absorbed, ...), the ABSORBED row is kept exactly as it was (own domain,
+// own blockingKeys, all intact — non-destructive per §8.1) with only a
+// `mergedInto` pointer added. Neither findByDomain nor findByBlockingKeys
+// "hands you the survivor" when they match on data that still lives on an
+// absorbed row — they return the row that actually matched. Any caller
+// that treats a lookup result as authoritative MUST check
+// `result.mergedInto` and, if set, follow the chain (survivor may itself
+// have since been absorbed into a later merge) to reach the live,
+// currently-canonical Company before acting on it. Both the in-memory and
+// Postgres implementations honor this identically — it is not a
+// Postgres-specific gap. No pipeline code consumes these lookups yet
+// (Phase 5); whichever phase wires entity resolution into a live run loop
+// is responsible for doing the mergedInto resolution, not this port.
 export interface CompanyRepository {
   findByDomain(domain: string): Promise<Company | undefined>;
   findByBlockingKeys(keys: readonly string[]): Promise<readonly Company[]>;
