@@ -1,0 +1,29 @@
+# Single service on purpose (spec §7/§18: "único servicio") — Postgres 16
+# with the pgvector extension pre-installed, so `companies.embedding
+# vector(384)` and its ivfflat index work with zero manual extension setup
+# beyond `CREATE EXTENSION IF NOT EXISTS vector;`, which the first committed
+# migration (drizzle/) issues.
+#
+# Credentials/port here MUST match src/config.ts's DATABASE_URL default —
+# that pairing is what makes the zero-config clean-machine bootstrap (spec
+# §18) work with no environment variables set at all.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: deal_signal_engine
+    volumes:
+      - deal_signal_engine_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  deal_signal_engine_pgdata:
