@@ -9,6 +9,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Postgres 16 + pgvector as a GitHub Actions service container — same
+    # image as docker-compose.yml, NOT testcontainers (spec §14's explicit
+    # instruction). Services run on `localhost` from the job's perspective,
+    # which is exactly what src/config.ts's DATABASE_URL default expects.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: deal_signal_engine
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/deal_signal_engine
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +42,8 @@ jobs:
       - run: npm run typecheck
 
       - run: npm run lint
+
+      - run: npm run db:migrate
 
       - run: npm run test
 
