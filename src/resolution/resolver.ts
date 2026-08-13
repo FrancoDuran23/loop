@@ -187,8 +187,8 @@ export function cosineSimilarity(a: readonly number[], b: readonly number[]): nu
 // Step 3 — Pair scoring
 //
 // Weighted combination of 4 signals. `domain` carries the DOMINANT weight
-// (0.5 — half the total, more than the other three combined) per spec
-// §8.1's explicit instruction that identical domain is "a strong match,
+// (0.5 — equal to the other three combined) per spec §8.1's explicit
+// instruction that identical domain is "a strong match,
 // dominant weight": two records on the same registrable domain are, in
 // practice, almost never two different companies. The remaining 0.5 splits
 // across name similarity (0.25 — the next most reliable signal, always
@@ -214,10 +214,16 @@ export const PAIR_SCORE_WEIGHTS = {
 } as const;
 
 // Judgment call — not specified numerically by the spec prose, only as
-// "high threshold" / "middle band" / "below". Chosen so that: (a) an
-// identical domain alone (the only available signal) auto-merges outright
-// (score 1.0 on that signal alone clears autoMerge); (b) a domain match
-// paired with a materially different name still clears the merge floor
+// "high threshold" / "middle band" / "below". Chosen so that: (a) a
+// genuine match — identical domain plus a name that is at least
+// recognizably similar (name similarity is always computed, never skipped,
+// even when domain also matches) — clears autoMerge; a domain match alone
+// against a MAXIMALLY dissimilar name does NOT reach autoMerge on its own
+// (0.5 domain + ~0 name/embedding/person renormalized ≈0.5-0.8, below the
+// 0.82 floor), which is intentional: domain match plus a wildly different
+// name is exactly the shape of a false positive a naive "domain is
+// everything" rule would fall for; (b) a domain match paired with a
+// materially different-but-plausible name still clears the merge floor
 // (matches the "domain is dominant" spec framing) without necessarily
 // reaching auto-merge; (c) name-only matches on a shared prefix land in the
 // uncertain band, never auto-merge, because name alone is not reliable
