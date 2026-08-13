@@ -1,12 +1,16 @@
 // Entity-resolution normalization (spec §8.1 step 1). Pure functions, no I/O,
 // no infrastructure — this file lives under the core-layer ESLint boundary
 // (eslint.config.js CORE_LAYER_GLOBS) and is machine-checked to import
-// nothing from postgres/drizzle/transformers/hono/node builtins.
+// nothing from postgres/drizzle/transformers/hono/node builtins. `psl` is a
+// pure synchronous lookup against a bundled data table (no I/O), same
+// category as `zod`/`yaml` already used in domain/ — not infrastructure.
 //
 // Two independent normalizers:
 //   normalizeName   — for Company.canonicalName / ExtractedCompany.name
 //   normalizeDomain — for Company.domain / ExtractedCompany.domain
 // Both feed resolver.ts's blocking-key derivation and pair scoring.
+
+import psl from 'psl';
 
 // ---------------------------------------------------------------------------
 // Name normalization
@@ -130,34 +134,52 @@ export const GENERIC_HOSTING_DOMAINS: readonly string[] = [
 
 const WWW_PREFIX = /^www\./i;
 
+// Defensive: the expected shape is a bare hostname (Company.domain /
+// ExtractedCompany.domain), but a full URL or a bare "host/path" sometimes
+// slips through. Route through URL parsing either way (prepending a scheme
+// when absent) so a trailing path/query never survives into what we treat
+// as the hostname — "acme.com/careers" must become "acme.com", not
+// "acme.com/careers".
 function extractHostname(input: string): string {
-  // Defensive: the expected shape is a bare hostname (Company.domain /
-  // ExtractedCompany.domain), but if a full URL slips through, extract just
-  // the hostname instead of normalizing garbage like "https://acme.com".
-  if (!input.includes('://')) {
-    return input;
-  }
+  const withScheme = input.includes('://') ? input : `http://${input}`;
   try {
-    return new URL(input).hostname.toLowerCase();
+    return new URL(withScheme).hostname.toLowerCase();
   } catch {
-    return input;
+    // Not URL-parseable even with a scheme prepended (e.g. malformed input).
+    // Fall back to stripping anything from the first slash onward.
+    return (input.split('/')[0] ?? input).toLowerCase();
   }
+}
+
+// A hostname identifies a specific company only if it is NOT a subdomain of
+// a known generic-hosting root (spec §8.1: github.io/vercel.app/etc. host
+// thousands of unrelated projects under the same root, so the domain alone
+// can't identify a company) — checked as an explicit suffix match against
+// GENERIC_HOSTING_DOMAINS, independent of whether the bundled Public Suffix
+// List happens to also list that root as a "private" suffix (it does for
+// some of these, e.g. github.io/vercel.app, but not necessarily all of
+// them, e.g. notion.site is not privately registered in PSL data — relying
+// on PSL registration status here would make the exclusion inconsistent
+// across entries; an explicit suffix check does not).
+function isUnderGenericHosting(hostname: string): boolean {
+  return GENERIC_HOSTING_DOMAINS.some(
+    (root) => hostname === root || hostname.endsWith(`.${root}`),
+  );
 }
 
 /**
  * Normalizes a domain for entity-resolution comparison (spec §8.1): strip
  * `www.`, keep the registrable domain, discard generic hosting domains.
  * Returns `undefined` when the domain does not identify a specific company
- * (empty input, or a generic hosting domain / subdomain of one).
+ * (empty input, a generic hosting domain / subdomain of one, or a hostname
+ * with no registrable domain at all, e.g. a bare IP address).
  *
- * Known limitation: "registrable domain" is approximated as "the last two
- * dot-separated labels", not a full Public Suffix List lookup. This is
- * wrong for multi-part TLDs (e.g. "acme.co.uk" would be truncated to
- * "co.uk" instead of "acme.co.uk"). Accepted tradeoff for this project's
- * scope — every GENERIC_HOSTING_DOMAINS entry is exactly two labels, so the
- * naive truncation and the exclusion check agree for all documented cases.
- * A production system resolving many ccTLD-style domains would need a real
- * PSL library here.
+ * Registrable-domain extraction uses `psl` (a bundled Public Suffix List),
+ * not a naive "last two labels" heuristic — the naive version truncates
+ * multi-part TLDs like "acme.co.uk" down to "co.uk", which then falsely
+ * collides with every other ".co.uk" company's truncated domain and can
+ * drive a silent auto-merge of unrelated companies. `psl.get()` returns the
+ * correct registrable unit ("acme.co.uk") for those cases.
  */
 export function normalizeDomain(domain: string): string | undefined {
   const trimmed = domain.trim().toLowerCase();
@@ -165,14 +187,18 @@ export function normalizeDomain(domain: string): string | undefined {
     return undefined;
   }
 
-  const hostname = extractHostname(trimmed);
-  const withoutWww = hostname.replace(WWW_PREFIX, '');
-
-  const labels = withoutWww.split('.').filter((label) => label.length > 0);
-  const registrable = labels.length > 2 ? labels.slice(-2).join('.') : withoutWww;
-
-  if (GENERIC_HOSTING_DOMAINS.includes(registrable)) {
+  const hostname = extractHostname(trimmed).replace(WWW_PREFIX, '');
+  if (hostname.length === 0 || isUnderGenericHosting(hostname)) {
     return undefined;
   }
-  return registrable;
+
+  // psl does not special-case IP addresses on its own — psl.get('192.168.1.1')
+  // returns the nonsensical '1.1' by treating the last two numeric labels
+  // like any other domain labels, instead of null. psl.isValid() is the
+  // library's own guard against that (and against "localhost" / a bare
+  // single-label host with no TLD) — check it before trusting get().
+  if (!psl.isValid(hostname)) {
+    return undefined;
+  }
+  return psl.get(hostname) ?? undefined;
 }

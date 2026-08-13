@@ -111,6 +111,30 @@ describe('normalizeDomain', () => {
     expect(normalizeDomain('https://www.acme.com/careers')).toBe('acme.com');
   });
 
+  it('extracts the hostname defensively when given a bare host+path with no scheme', () => {
+    // A previous naive "last two labels" implementation let the path
+    // survive into the "registrable domain" here ("acme.com/careers"),
+    // since it never went through URL parsing without a scheme present.
+    expect(normalizeDomain('acme.com/careers')).toBe('acme.com');
+  });
+
+  it('correctly resolves a multi-part TLD registrable domain (co.uk)', () => {
+    // Regression test for a real bug: a naive "last two labels" heuristic
+    // truncated "acme.co.uk" down to "co.uk", which then falsely collided
+    // with every other .co.uk company's truncated domain. psl.get() must
+    // return the full registrable unit.
+    expect(normalizeDomain('acme.co.uk')).toBe('acme.co.uk');
+    expect(normalizeDomain('www.acme.co.uk')).toBe('acme.co.uk');
+  });
+
+  it('does not collide two different companies on different .co.uk domains', () => {
+    expect(normalizeDomain('acme.co.uk')).not.toBe(normalizeDomain('other-thing.co.uk'));
+  });
+
+  it('returns undefined for a bare IP address (no registrable domain)', () => {
+    expect(normalizeDomain('192.168.1.1')).toBeUndefined();
+  });
+
   it('returns undefined for an empty or whitespace-only input', () => {
     expect(normalizeDomain('')).toBeUndefined();
     expect(normalizeDomain('   ')).toBeUndefined();
