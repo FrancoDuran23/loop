@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunId, SourceRecord, SourceRecordId } from '../src/domain/entities.js';
+import type { SourceRecord, SourceRecordId } from '../src/domain/entities.js';
 import {
   createCliSourceRecordRepository,
   formatExtractedCompany,
@@ -110,7 +110,7 @@ describe('createCliSourceRecordRepository', () => {
     expect(first.isNew).toBe(true);
     expect(second.isNew).toBe(false);
 
-    const all = await repo.listByRun('run-1' as RunId, undefined, 10);
+    const all = await repo.list(undefined, 10);
     expect(all).toHaveLength(1);
   });
 });

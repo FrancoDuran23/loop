@@ -44,8 +44,7 @@ export function createCliSourceRecordRepository(): SourceRecordRepository {
       return { id: record.id, isNew: true };
     },
 
-    async listByRun(runId, after, limit) {
-      void runId; // single-run CLI demo — see tests/doubles for the documented limitation
+    async list(after, limit) {
       const startIndex = after ? insertionOrder.indexOf(after) + 1 : 0;
       const page = insertionOrder.slice(startIndex, startIndex + limit);
       const records: SourceRecord[] = [];

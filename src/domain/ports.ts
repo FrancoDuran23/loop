@@ -110,11 +110,13 @@ export interface CompanyRepository {
 
 export interface SourceRecordRepository {
   upsert(r: SourceRecord): Promise<{ readonly id: SourceRecordId; readonly isNew: boolean }>;
-  listByRun(
-    runId: RunId,
-    after: SourceRecordId | undefined,
-    limit: number,
-  ): Promise<readonly SourceRecord[]>;
+  // Cursor-paginated over ALL source records, not scoped to a run: per
+  // schema §7, source_records has no run_id column — ingestion accumulates
+  // continuously across runs (idempotent by (source, sourceId)), it is not
+  // partitioned per pipeline execution. A run's own scope is what the
+  // pipeline holds in memory from that execution's fetch() calls, not
+  // something re-queried back out by run id afterward.
+  list(after: SourceRecordId | undefined, limit: number): Promise<readonly SourceRecord[]>;
 }
 
 export interface RunRepository {

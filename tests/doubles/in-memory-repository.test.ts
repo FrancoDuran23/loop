@@ -63,7 +63,7 @@ describe('createInMemorySourceRecordRepository', () => {
     expect(secondResult.isNew).toBe(false);
     expect(secondResult.id).toBe(firstResult.id);
 
-    const all = await repo.listByRun('run-1' as RunId, undefined, 10);
+    const all = await repo.list(undefined, 10);
     expect(all).toHaveLength(1);
     expect(all[0]!.fetchedAt).toBe('2026-01-02T00:00:00.000Z');
   });
@@ -73,7 +73,7 @@ describe('createInMemorySourceRecordRepository', () => {
     await repo.upsert(makeSourceRecord({ sourceId: 'hn-1' }));
     await repo.upsert(makeSourceRecord({ sourceId: 'hn-2' }));
 
-    const all = await repo.listByRun('run-1' as RunId, undefined, 10);
+    const all = await repo.list(undefined, 10);
     expect(all).toHaveLength(2);
   });
 
@@ -82,11 +82,11 @@ describe('createInMemorySourceRecordRepository', () => {
     await repo.upsert(makeSourceRecord({ source: 'hackernews', sourceId: 'shared-id' }));
     await repo.upsert(makeSourceRecord({ source: 'github', sourceId: 'shared-id' }));
 
-    const all = await repo.listByRun('run-1' as RunId, undefined, 10);
+    const all = await repo.list(undefined, 10);
     expect(all).toHaveLength(2);
   });
 
-  it('listByRun paginates via the after cursor with no gaps or duplicates', async () => {
+  it('list paginates via the after cursor with no gaps or duplicates', async () => {
     const repo = createInMemorySourceRecordRepository();
     const r1 = makeSourceRecord({ sourceId: 'hn-1' });
     const r2 = makeSourceRecord({ sourceId: 'hn-2' });
@@ -95,10 +95,10 @@ describe('createInMemorySourceRecordRepository', () => {
     await repo.upsert(r2);
     await repo.upsert(r3);
 
-    const firstPage = await repo.listByRun('run-1' as RunId, undefined, 2);
+    const firstPage = await repo.list(undefined, 2);
     expect(firstPage.map((r) => r.sourceId)).toEqual(['hn-1', 'hn-2']);
 
-    const secondPage = await repo.listByRun('run-1' as RunId, firstPage[1]!.id, 2);
+    const secondPage = await repo.list(firstPage[1]!.id, 2);
     expect(secondPage.map((r) => r.sourceId)).toEqual(['hn-3']);
   });
 });

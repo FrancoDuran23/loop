@@ -195,16 +195,7 @@ export function createInMemorySourceRecordRepository(): SourceRecordRepository {
       return { id: record.id, isNew: true };
     },
 
-    async listByRun(runId, after, limit) {
-      // NOTE: SourceRecordRepository.upsert(r: SourceRecord) carries no
-      // runId, so this in-memory double has no way to associate a record
-      // with the run that ingested it — any implementation of this exact
-      // port shape faces the same gap. For Phase 3's single-run CLI/pipeline
-      // usage this is a non-issue; listByRun returns ALL records in
-      // insertion order, cursor-paginated by after/limit, ignoring the
-      // runId filter. Flagged for Phase 4/5 to revisit if multi-run
-      // isolation is needed.
-      void runId;
+    async list(after, limit) {
       const startIndex = after ? insertionOrder.indexOf(after) + 1 : 0;
       const page = insertionOrder.slice(startIndex, startIndex + limit);
       const records: SourceRecord[] = [];
