@@ -425,5 +425,35 @@
       "domain": "zephyrfreight.io",
       "description": "long-haul trucking dispatch optimization"
     }
+  },
+  {
+    "id": "pair-31-multi-part-tld-same-company",
+    "shouldMatch": true,
+    "note": "Regression case for the ccTLD registrable-domain bug: same company on a multi-part TLD (acme.co.uk), which a naive last-2-labels heuristic would truncate to 'co.uk' — psl.get() must resolve the full registrable domain correctly.",
+    "a": {
+      "canonicalName": "Acme Consulting Ltd",
+      "domain": "acme.co.uk",
+      "description": "management consulting for logistics firms"
+    },
+    "b": {
+      "canonicalName": "Acme Consulting",
+      "domain": "www.acme.co.uk",
+      "description": "management consulting for the logistics sector"
+    }
+  },
+  {
+    "id": "pair-32-multi-part-tld-different-companies",
+    "shouldMatch": false,
+    "note": "Regression case for the ccTLD collision bug (see normalize.ts's normalizeDomain docstring): two UNRELATED companies both on '.co.uk' domains. Before the psl fix, a naive last-2-labels heuristic truncated both to the bare suffix 'co.uk', made them collide on the domain signal, and could silently auto-merge two different companies.",
+    "a": {
+      "canonicalName": "Acme Consulting",
+      "domain": "acme.co.uk",
+      "description": "management consulting for logistics firms"
+    },
+    "b": {
+      "canonicalName": "Orbit Robotics",
+      "domain": "other-thing.co.uk",
+      "description": "industrial robotics for automotive assembly"
+    }
   }
 ]
