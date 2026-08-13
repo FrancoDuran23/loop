@@ -12,16 +12,30 @@ const CORE_LAYER_GLOBS = [
   'src/scoring/**/*.ts',
 ];
 
-const BANNED_INFRA_IMPORTS = [
-  { name: 'postgres', message: 'Core layers must not import infrastructure. See design.md D1.' },
-  { name: 'drizzle-orm', message: 'Core layers must not import infrastructure. See design.md D1.' },
+// `group` uses gitignore-style glob matching, so it catches subpath imports too
+// (e.g. `drizzle-orm/pg-core`, `hono/node-server`) — a plain `paths` exact-match
+// list would silently miss those, which is how Drizzle/Hono are normally imported.
+const BANNED_INFRA_IMPORT_GROUPS = [
   {
-    name: '@huggingface/transformers',
+    group: ['postgres', 'postgres/*'],
     message: 'Core layers must not import infrastructure. See design.md D1.',
   },
-  { name: 'hono', message: 'Core layers must not import infrastructure. See design.md D1.' },
-  { name: 'fs', message: 'Core layers must not import infrastructure. See design.md D1.' },
-  { name: 'node:fs', message: 'Core layers must not import infrastructure. See design.md D1.' },
+  {
+    group: ['drizzle-orm', 'drizzle-orm/*'],
+    message: 'Core layers must not import infrastructure. See design.md D1.',
+  },
+  {
+    group: ['@huggingface/transformers', '@huggingface/transformers/*'],
+    message: 'Core layers must not import infrastructure. See design.md D1.',
+  },
+  {
+    group: ['hono', 'hono/*'],
+    message: 'Core layers must not import infrastructure. See design.md D1.',
+  },
+  {
+    group: ['fs', 'node:fs', 'node:fs/*', 'fs/*'],
+    message: 'Core layers must not import infrastructure. See design.md D1.',
+  },
 ];
 
 export default tseslint.config(
@@ -41,7 +55,7 @@ export default tseslint.config(
   {
     files: CORE_LAYER_GLOBS,
     rules: {
-      'no-restricted-imports': ['error', { paths: BANNED_INFRA_IMPORTS }],
+      'no-restricted-imports': ['error', { patterns: BANNED_INFRA_IMPORT_GROUPS }],
     },
   },
   prettierConfig,
