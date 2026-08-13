@@ -17,7 +17,9 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "pino": "^10.1.8"
+    "pino": "^10.1.8",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
