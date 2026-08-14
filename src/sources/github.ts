@@ -445,6 +445,24 @@ export class GithubAdapter implements SourceAdapter {
         Accept: 'application/vnd.github.star+json',
       });
       const stargazers = stargazersResponseSchema.parse(body);
+      // A genuinely empty array here is itself a red flag, not a confirmed
+      // "zero stars in the last 30 days": we only reach this call when
+      // starCount > 0, so the page this code computed as "the last page"
+      // must contain at least one real stargazer. An empty result means
+      // either a benign star-count race (fluctuated between the search
+      // snapshot and this request) or — per GitHub's 2026 policy change
+      // restricting this endpoint to admins/collaborators — a silent
+      // access restriction returning 200 + [] instead of an error status.
+      // Either way, treat it as "unable to determine", not as a real
+      // zero, so a restricted/degraded response can't quietly poison
+      // momentum scoring with a false zero instead of omitting the signal.
+      if (stargazers.length === 0) {
+        this.logger.warn(
+          { owner, repo },
+          'github adapter: stargazers page unexpectedly empty despite starCount > 0, omitting github_stars_delta_30d rather than reporting a false zero',
+        );
+        return undefined;
+      }
       const cutoffMs = Date.now() - THIRTY_DAYS_MS;
       return stargazers.filter((s) => new Date(s.starred_at).getTime() >= cutoffMs).length;
     } catch (err) {

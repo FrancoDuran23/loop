@@ -404,6 +404,40 @@ describe('GithubAdapter', () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
+  it('treats a 200 OK with an empty stargazers array as unavailable, not a real zero, and omits the delta', async () => {
+    // Regression case: starCount > 0 guarantees the computed "last page"
+    // must contain at least one real stargazer. An empty 200 response
+    // (rather than an error status) is itself a sign of an unreliable
+    // result — e.g. GitHub's stargazers endpoint being access-restricted
+    // and silently returning no data instead of an error — and must not
+    // be recorded as a confirmed "0 stars in the last 30 days".
+    const item = repoItem({ stargazers_count: 5 });
+    const fetchImpl: FetchLike = vi.fn((url: string) => {
+      if (url.includes('/search/repositories')) {
+        return Promise.resolve(okResponse(searchResponse([item])));
+      }
+      return Promise.resolve(okResponse([])); // 200 OK, empty body
+    });
+    const logger = stubLogger();
+    const adapter = new GithubAdapter(fetchImpl, { rateLimiter: stubRateLimiter(), logger });
+
+    const promise = (async () => {
+      const pages = [];
+      for await (const page of adapter.fetch({ limit: 10, signal: new AbortController().signal })) {
+        pages.push(page);
+      }
+      return pages;
+    })();
+
+    await vi.runAllTimersAsync();
+    const pages = await promise;
+
+    const signals = pages[0]!.records[0]!.extracted.signals;
+    expect(signals.some((s) => s.kind === 'github_stars')).toBe(true);
+    expect(signals.some((s) => s.kind === 'github_stars_delta_30d')).toBe(false);
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
   it('computes nextWatermark as the max created_at seen across a page', async () => {
     const items = [
       repoItem({ id: 1, created_at: '2024-01-01T00:00:00Z', stargazers_count: 0 }),
