@@ -17,9 +17,11 @@
     "build": "tsc -p tsconfig.build.json",
     "pipeline": "tsx src/cli.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "verify:local-embeddings": "tsx scripts/verify-local-embeddings.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "drizzle-orm": "^0.45.2",
     "pino": "^10.1.8",
     "postgres": "^3.4.9",
