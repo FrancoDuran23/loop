@@ -219,6 +219,14 @@ function latestValuePerMomentumKind(company: Company): ReadonlyMap<SignalKind, n
 export function rawMomentum(company: Company): number {
   let total = 0;
   for (const value of latestValuePerMomentumKind(company).values()) {
+    // `Math.max(0, value)` floors a negative delta (e.g. GitHub stars lost
+    // over the window) to a zero contribution rather than letting it pull
+    // the sum negative. Momentum is framed by spec as growth/activity, not
+    // decline — a declining signal should mean "no momentum here", not
+    // "negative momentum" penalizing an otherwise-strong company on some
+    // other kind. In practice this only matters for
+    // github_stars_delta_30d; hn_points/hn_show/launch/hiring are never
+    // negative to begin with.
     total += Math.log1p(Math.max(0, value));
   }
   return total;
