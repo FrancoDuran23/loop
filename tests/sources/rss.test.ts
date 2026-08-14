@@ -121,7 +121,9 @@ describe('RssAdapter', () => {
       'Acme announced a $5M seed round led by Example Ventures.',
     );
     expect(record!.extracted.url).toBe('https://techcrunch.com/2026/08/13/acme-seed/');
-    expect(record!.extracted.people).toEqual(['Jane Reporter']);
+    // dc:creator is the article's journalist, never a founder/contributor
+    // -- ExtractedCompany.people must NOT be populated from it.
+    expect(record!.extracted.people).toBeUndefined();
     expect(record!.extracted.signals).toEqual([
       {
         kind: 'launch',
@@ -156,7 +158,8 @@ describe('RssAdapter', () => {
     const [record] = pages[0]!.records;
     expect(record!.sourceId).toBe('https://theverge.com/?p=979977');
     expect(record!.extracted.name).toBe('Widgetly launches public beta');
-    expect(record!.extracted.people).toEqual(['Sean Reporter']);
+    // Atom <author> is the journalist, same reasoning as dc:creator above.
+    expect(record!.extracted.people).toBeUndefined();
     expect(record!.extracted.signals[0]!.kind).toBe('launch');
   });
 
@@ -324,6 +327,36 @@ describe('RssAdapter', () => {
     expect(pages).toHaveLength(1);
     expect(pages[0]!.records).toHaveLength(1);
     expect(pages[0]!.records[0]!.extracted.name).toBe('Has a title');
+  });
+
+  it('drops an item with no parseable date instead of faking observedAt as "now"', async () => {
+    // Regression: falling back to "now" would make an undated item
+    // re-yield on every run (since-filtering could never exclude it) and
+    // its recency score would drift forward indefinitely. Dropping it is
+    // the only choice consistent with the domain's own "a Signal is never
+    // a bare, unattributable number" principle.
+    const xml = rssFeedXml(
+      [
+        `<item><title>No date at all</title><link>https://example.com/no-date</link></item>`,
+        rssItemXml({
+          title: 'Has a date',
+          link: 'https://example.com/has-date',
+          guid: 'guid-has-date',
+          pubDate: 'Thu, 13 Aug 2026 11:00:00 +0000',
+        }),
+      ].join('\n'),
+    );
+    const fetchImpl: FetchLike = vi.fn(() => Promise.resolve(okResponse(xml)));
+    const adapter = new RssAdapter(fetchImpl, { feeds: [FEED_A] });
+
+    const pages = [];
+    for await (const page of adapter.fetch({ limit: 10, signal: new AbortController().signal })) {
+      pages.push(page);
+    }
+
+    expect(pages).toHaveLength(1);
+    expect(pages[0]!.records).toHaveLength(1);
+    expect(pages[0]!.records[0]!.extracted.name).toBe('Has a date');
   });
 
   it('stops once opts.limit is reached across multiple feeds', async () => {

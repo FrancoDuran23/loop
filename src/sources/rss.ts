@@ -189,18 +189,24 @@ function stableSourceId(fields: RssItemFields): string {
 // ---------------------------------------------------------------------------
 // observedAt resolution — prefers rss-parser's own normalized `isoDate`
 // (present for both RSS `pubDate` and Atom `published`/`updated` in
-// practice), falls back to parsing `pubDate` manually, and finally falls
-// back to the fetch time itself so a record is never dropped purely for
-// lacking a parseable date.
+// practice), falls back to parsing `pubDate` manually. Returns undefined
+// (never a "now" fallback) when neither is available: this signal's
+// observedAt feeds Phase 6's recency/momentum scoring directly, and a
+// fabricated "now" would (a) never satisfy `since`-based filtering, so the
+// item would be re-yielded on every single run forever, and (b) make its
+// recency score drift forward indefinitely, always looking "just
+// launched" — a genuinely undated item is dropped instead (see the skip
+// below), matching the domain's own principle that a Signal is never a
+// bare, unattributable number.
 // ---------------------------------------------------------------------------
 
-function resolveObservedAt(fields: RssItemFields, fetchedAt: string): string {
+function resolveObservedAt(fields: RssItemFields): string | undefined {
   if (fields.isoDate) return fields.isoDate;
   if (fields.pubDate) {
     const parsed = new Date(fields.pubDate);
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
   }
-  return fetchedAt;
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +221,6 @@ function itemToSourceRecord(
 ): SourceRecord {
   const name = fields.title!.trim();
   const link = fields.link?.trim();
-  const person = fields.creator?.trim() || fields.author?.trim();
   const description = fields.contentSnippet?.trim() || fields.summary?.trim();
 
   const signals: Signal[] = [
@@ -228,11 +233,18 @@ function itemToSourceRecord(
     },
   ];
 
+  // `people` (ExtractedCompany's founder/contributor field, per
+  // entities.ts) is deliberately NOT populated here: the only candidate
+  // value an RSS item offers is dc:creator/<author>, which is the
+  // JOURNALIST who wrote the article — never a founder. Populating it
+  // would feed resolver.ts's shared-person pair-scoring signal with data
+  // that means something else entirely (two unrelated companies covered
+  // by the same reporter are not "the same person" in the sense that
+  // field is meant to capture).
   const extracted: ExtractedCompany = {
     name,
     ...(description ? { description } : {}),
     ...(link ? { url: link } : {}),
-    ...(person ? { people: [person] } : {}),
     signals,
   };
 
@@ -303,7 +315,8 @@ export class RssAdapter implements SourceAdapter {
         const fields = parseRssItemFields(raw);
         if (!fields?.title?.trim()) continue; // malformed/titleless item, skip just this item
 
-        const observedAt = resolveObservedAt(fields, fetchedAt);
+        const observedAt = resolveObservedAt(fields);
+        if (!observedAt) continue; // no genuinely parseable date — dropped, never faked as "now"
         if (opts.since && observedAt <= opts.since) continue; // client-side since-filter
 
         records.push(itemToSourceRecord(raw, fields, observedAt, fetchedAt));
