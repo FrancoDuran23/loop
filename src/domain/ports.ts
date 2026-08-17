@@ -22,6 +22,7 @@ import type {
   Company,
   CompanyId,
   MergeEvidence,
+  Run,
   RunId,
   RunStats,
   RunStatus,
@@ -159,6 +160,26 @@ export interface RunRepository {
   watermark(source: SourceName): Promise<string | undefined>;
   setWatermark(source: SourceName, w: string): Promise<void>;
   finish(id: RunId, status: RunStatus, stats: RunStats): Promise<void>; // completed|partial|failed
+  // Added by the Hono API phase (src/api/**) — the port originally shipped
+  // write-only (start/watermark/setWatermark/finish), which was enough for
+  // the pipeline orchestrator but leaves no way to serve `GET /runs/:id` or
+  // to discover "the latest run" for `GET /deals`. Same pattern as
+  // CompanyRepository.findById/listAll (Phase 9a): a real read path exposed
+  // a genuine port gap, filled here rather than routed around.
+  /** Fetches one run by id, or `undefined` if no run with that id was ever
+   * started. `status` is `'running'` when the run has started but
+   * `finish()` has not yet been called for it (see Run.status's own doc
+   * comment in entities.ts). */
+  get(id: RunId): Promise<Run | undefined>;
+  /** The run `GET /deals` treats as "the latest run": the most recently
+   * FINISHED run whose status is `'completed'` or `'partial'` (both persist
+   * real `scored_deals` — `'failed'` never does, per pipeline/run.ts's own
+   * documented status taxonomy), ordered by finish time descending.
+   * `undefined` when no run has ever reached one of those two statuses
+   * (e.g. a fresh database, or every run so far has failed catastrophically
+   * or is still in progress) — callers MUST treat that as "no deals yet",
+   * not as an error. */
+  findLatestWithDeals(): Promise<Run | undefined>;
 }
 
 export interface ScoredDealRepository {

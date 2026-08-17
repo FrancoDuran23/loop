@@ -165,7 +165,19 @@ export interface RunStats {
 export interface Run {
   readonly id: RunId;
   readonly thesisName: string;
-  readonly status: RunStatus;
+  // Phase 9b widening (documented, deliberate): RunStatus itself stays a
+  // closed TERMINAL union ('completed' | 'partial' | 'failed') — finish()
+  // still only ever accepts one of those three. But GET /runs/:id (Phase 9b)
+  // needs to represent a run that has started but not yet finished (the
+  // fire-and-forget POST /runs background execution is still in flight) —
+  // db/schema.ts's `runs.status` column is nullable specifically for this
+  // ("NULL truthfully represents 'not finished yet'"). Rather than inventing
+  // a 4th terminal-looking RunStatus member (which would force every
+  // existing exhaustive-terminal-status site to handle a non-terminal case
+  // that never applies to them), the READ-side `Run.status` is widened to
+  // `RunStatus | 'running'` — a small, disclosed type change scoped to this
+  // one field, not a change to the RunStatus union itself.
+  readonly status: RunStatus | 'running';
   readonly startedAt: string; // ISO 8601
   readonly finishedAt?: string; // ISO 8601
   readonly stats?: RunStats;

@@ -13,6 +13,7 @@
 import type {
   Company,
   CompanyId,
+  Run,
   RunId,
   RunStats,
   RunStatus,
@@ -224,17 +225,42 @@ export function createInMemorySourceRecordRepository(): SourceRecordRepository {
 
 interface RunState {
   readonly thesis: string;
+  readonly startedAt: string;
   status?: RunStatus;
   stats?: RunStats;
+  finishedAt?: string;
+}
+
+// `RUNS_WITH_DEALS_STATUSES` mirrors pipeline/run.ts's own documented status
+// taxonomy: 'completed' and 'partial' both persist real scored_deals (a
+// source-ingestion failure never blocks scoring, which always runs against
+// the FULL known company set); 'failed' never does.
+const RUNS_WITH_DEALS_STATUSES: ReadonlySet<RunStatus> = new Set(['completed', 'partial']);
+
+function toRun(id: RunId, state: RunState): Run {
+  return {
+    id,
+    thesisName: state.thesis,
+    status: state.status ?? 'running',
+    startedAt: state.startedAt,
+    ...(state.finishedAt ? { finishedAt: state.finishedAt } : {}),
+    ...(state.stats ? { stats: state.stats } : {}),
+  };
 }
 
 export function createInMemoryRunRepository(): RunRepository {
   const runs = new Map<RunId, RunState>();
   const watermarks = new Map<SourceName, string>();
+  // Insertion order doubles as "most recently started" ordering — matches
+  // the real Postgres implementation's ORDER BY finished_at DESC intent
+  // closely enough for this double's purposes (tests always start/finish
+  // runs in the order they care about; see run-repository.contract.ts).
+  const insertionOrder: RunId[] = [];
 
   return {
     async start(id, thesis) {
-      runs.set(id, { thesis });
+      runs.set(id, { thesis, startedAt: new Date().toISOString() });
+      insertionOrder.push(id);
     },
 
     async watermark(source) {
@@ -250,7 +276,23 @@ export function createInMemoryRunRepository(): RunRepository {
       if (!run) {
         throw new Error(`finish: run ${id} was never started`);
       }
-      runs.set(id, { ...run, status, stats });
+      runs.set(id, { ...run, status, stats, finishedAt: new Date().toISOString() });
+    },
+
+    async get(id) {
+      const run = runs.get(id);
+      return run ? toRun(id, run) : undefined;
+    },
+
+    async findLatestWithDeals() {
+      for (let i = insertionOrder.length - 1; i >= 0; i -= 1) {
+        const id = insertionOrder[i]!;
+        const run = runs.get(id);
+        if (run?.status && RUNS_WITH_DEALS_STATUSES.has(run.status)) {
+          return toRun(id, run);
+        }
+      }
+      return undefined;
     },
   };
 }

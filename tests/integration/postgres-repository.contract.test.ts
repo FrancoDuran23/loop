@@ -16,9 +16,11 @@ import type { Database } from '../../src/db/client.js';
 import {
   computeCompanyBlockingKeys,
   createPostgresCompanyRepository,
+  createPostgresRunRepository,
   createPostgresSourceRecordRepository,
 } from '../../src/db/repository.js';
 import { runCompanyRepositoryContract } from '../contract/company-repository.contract.js';
+import { runRunRepositoryContract } from '../contract/run-repository.contract.js';
 import { runSourceRecordRepositoryContract } from '../contract/source-record-repository.contract.js';
 import { closeDatabase, setupTestDatabase, truncateAllTables } from './db-test-helper.js';
 
@@ -67,4 +69,8 @@ runCompanyRepositoryContract({
 
 runSourceRecordRepositoryContract({
   createRepository: () => createPostgresSourceRecordRepository(db),
+});
+
+runRunRepositoryContract({
+  createRepository: () => createPostgresRunRepository(db),
 });

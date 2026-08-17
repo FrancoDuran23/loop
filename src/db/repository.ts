@@ -9,10 +9,12 @@
 // bodies against both. Every non-obvious behavioral choice below is cross-
 // referenced against what the in-memory double actually does.
 
-import { arrayOverlaps, eq, inArray, sql } from 'drizzle-orm';
+import { arrayOverlaps, desc, eq, inArray, sql } from 'drizzle-orm';
 import type {
   Company,
   CompanyId,
+  Run,
+  RunId,
   Signal,
   SourceRecord,
   SourceRecordId,
@@ -386,6 +388,25 @@ export function createPostgresSourceRecordRepository(db: Database): SourceRecord
 // RunRepository
 // ---------------------------------------------------------------------------
 
+// Maps a `runs` row to the domain `Run` shape. `status` is nullable on the
+// row (schema.ts: "NULL truthfully represents 'not finished yet'") — mapped
+// to the widened `Run.status`'s `'running'` member (entities.ts's own doc
+// comment on that field explains the widening). `thesisHash` (the literal
+// §7 column name) currently stores the thesis NAME verbatim, not a real
+// hash — see schema.ts's own header comment on that column.
+function toRun(row: typeof runs.$inferSelect): Run {
+  return {
+    id: row.id as RunId,
+    thesisName: row.thesisHash,
+    status: row.status ?? 'running',
+    startedAt: row.startedAt.toISOString(),
+    ...(row.finishedAt ? { finishedAt: row.finishedAt.toISOString() } : {}),
+    ...(row.stats ? { stats: row.stats } : {}),
+  };
+}
+
+const RUNS_WITH_DEALS_STATUSES = ['completed', 'partial'] as const;
+
 export function createPostgresRunRepository(db: Database): RunRepository {
   return {
     async start(id, thesis) {
@@ -417,6 +438,21 @@ export function createPostgresRunRepository(db: Database): RunRepository {
       if (result.length === 0) {
         throw new Error(`finish: run ${id} was never started`);
       }
+    },
+
+    async get(id) {
+      const [row] = await db.select().from(runs).where(eq(runs.id, id)).limit(1);
+      return row ? toRun(row) : undefined;
+    },
+
+    async findLatestWithDeals() {
+      const [row] = await db
+        .select()
+        .from(runs)
+        .where(inArray(runs.status, [...RUNS_WITH_DEALS_STATUSES]))
+        .orderBy(desc(runs.finishedAt))
+        .limit(1);
+      return row ? toRun(row) : undefined;
     },
   };
 }

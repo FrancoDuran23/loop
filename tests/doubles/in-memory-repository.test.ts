@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CompanyId, RunId, ScoredDeal } from '../../src/domain/entities.js';
 import { runCompanyRepositoryContract } from '../contract/company-repository.contract.js';
+import { runRunRepositoryContract } from '../contract/run-repository.contract.js';
 import { runSourceRecordRepositoryContract } from '../contract/source-record-repository.contract.js';
 import {
   computeCompanyBlockingKeys,
@@ -10,15 +11,15 @@ import {
   createInMemorySourceRecordRepository,
 } from './in-memory-repository.js';
 
-// CompanyRepository and SourceRecordRepository behavioral coverage now
-// lives in the shared contract suite (tests/contract/*.contract.ts, Phase
-// 5) — run here against the in-memory double, and again in
-// tests/integration/postgres-repository.contract.test.ts against the real
-// Postgres implementation. RunRepository and ScoredDealRepository are not
-// yet extracted into a shared contract (deferred — see Phase 5 apply notes:
-// prioritized CompanyRepository/SourceRecordRepository since those two are
-// what the idempotency/merge guarantees hinge on); their tests stay inline
-// below, unchanged from Phase 3.
+// CompanyRepository, SourceRecordRepository, and (as of Phase 9b)
+// RunRepository behavioral coverage lives in the shared contract suite
+// (tests/contract/*.contract.ts) — run here against the in-memory double,
+// and again in tests/integration/postgres-repository.contract.test.ts
+// against the real Postgres implementation. ScoredDealRepository still has
+// no read method on its port (DealReadModel, Phase 9b, is a SEPARATE port
+// that owns the API's read path — see domain/ports.ts), so its tests stay
+// inline below against the in-memory double's own `all()` test-only
+// inspector, unchanged from Phase 3.
 
 runCompanyRepositoryContract({
   createRepository: () => createInMemoryCompanyRepository(),
@@ -29,37 +30,8 @@ runSourceRecordRepositoryContract({
   createRepository: () => createInMemorySourceRecordRepository(),
 });
 
-describe('createInMemoryRunRepository', () => {
-  it('watermark returns undefined for a source that was never set', async () => {
-    const repo = createInMemoryRunRepository();
-    expect(await repo.watermark('hackernews')).toBeUndefined();
-  });
-
-  it('setWatermark then watermark round-trips the value, and a later call overwrites it', async () => {
-    const repo = createInMemoryRunRepository();
-    await repo.setWatermark('hackernews', '1700000000');
-    expect(await repo.watermark('hackernews')).toBe('1700000000');
-
-    await repo.setWatermark('hackernews', '1700000500');
-    expect(await repo.watermark('hackernews')).toBe('1700000500');
-  });
-
-  it('finish succeeds after start (no throw)', async () => {
-    const repo = createInMemoryRunRepository();
-    const runId = crypto.randomUUID() as RunId;
-    await repo.start(runId, 'thesis-a');
-
-    await expect(repo.finish(runId, 'completed', { failedSources: [] })).resolves.toBeUndefined();
-  });
-
-  it('finish throws when called on a run id that was never started', async () => {
-    const repo = createInMemoryRunRepository();
-    const runId = crypto.randomUUID() as RunId;
-
-    await expect(repo.finish(runId, 'completed', { failedSources: [] })).rejects.toThrow(
-      /never started/i,
-    );
-  });
+runRunRepositoryContract({
+  createRepository: () => createInMemoryRunRepository(),
 });
 
 describe('createInMemoryScoredDealRepository', () => {
