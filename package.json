@@ -21,8 +21,10 @@
     "verify:local-embeddings": "tsx scripts/verify-local-embeddings.ts"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.1",
     "@huggingface/transformers": "^4.2.0",
     "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.2",
     "pino": "^10.1.8",
     "postgres": "^3.4.9",
     "psl": "^1.15.0",

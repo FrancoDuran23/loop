@@ -19,28 +19,14 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { Company, CompanyId, RunId, ScoredDeal, SourceName } from './domain/entities.js';
-import type { SourceAdapter } from './domain/ports.js';
+import type { Company, CompanyId, ScoredDeal, SourceName } from './domain/entities.js';
 import { parseThesis } from './domain/thesis.js';
-import { loadConfig, type Config } from './config.js';
-import { closeDatabase, createDatabase } from './db/client.js';
-import {
-  createPostgresCompanyRepository,
-  createPostgresRunRepository,
-  createPostgresScoredDealRepository,
-  createPostgresSourceRecordRepository,
-} from './db/repository.js';
-import { createDeterministicEmbeddingProvider } from './providers/embeddings/deterministic.js';
-import { createLocalEmbeddingProvider } from './providers/embeddings/local.js';
-import { createRulesLlmProvider } from './providers/llm/rules.js';
+import { loadConfig } from './config.js';
 import { runPipeline, type RunPipelineDeps } from './pipeline/run.js';
-import { GithubAdapter } from './sources/github.js';
-import { HackerNewsAdapter } from './sources/hackernews.js';
-import { RssAdapter } from './sources/rss.js';
+import { ALL_SOURCES, createRuntime } from './runtime.js';
 
 const DEFAULT_LIMIT_PER_SOURCE = 20;
 const DEFAULT_THESIS_PATH = 'thesis.example.yaml';
-const ALL_SOURCES: readonly SourceName[] = ['github', 'hackernews', 'rss'];
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -118,68 +104,38 @@ export function formatRankedDeals(
 }
 
 // ---------------------------------------------------------------------------
-// Composition — builds a real SourceAdapter for one source name. No `new`
-// on a concrete class happens outside this function and `main()` (the
-// composition root for this entrypoint); src/pipeline/run.ts itself never
-// instantiates a concrete adapter/repository/provider.
-// ---------------------------------------------------------------------------
-
-function buildSourceAdapter(name: SourceName, config: Config): SourceAdapter {
-  switch (name) {
-    case 'github':
-      return new GithubAdapter(
-        (url, init) => fetch(url, init),
-        config.GITHUB_TOKEN ? { token: config.GITHUB_TOKEN } : {},
-      );
-    case 'hackernews':
-      return new HackerNewsAdapter((url, init) => fetch(url, init));
-    case 'rss':
-      return new RssAdapter((url, init) => fetch(url, init));
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const options = parseCliArgs(argv);
-  const config = loadConfig();
-
-  if (config.LLM_PROVIDER === 'ollama') {
-    // OllamaLlmProvider is explicitly out of scope (providers/llm/rules.ts's
-    // own header comment) — fail fast with a clear message rather than a
-    // downstream crash from a provider factory that doesn't exist.
-    throw new Error(
-      'LLM_PROVIDER=ollama is not implemented yet. Unset it (or set it to "rules") to use the default RulesLlmProvider.',
-    );
-  }
+  // createRuntime (src/runtime.ts) fails fast on LLM_PROVIDER=ollama and
+  // owns all real composition (Postgres repos, DealReadModel, embeddings,
+  // LLM, source-adapter factory) — the SAME graph src/api/server.ts's
+  // POST /runs route now builds, extracted here in Phase 9b to avoid two
+  // independently-maintained copies of this wiring (see runtime.ts's own
+  // header comment for the full rationale).
+  const runtime = createRuntime(loadConfig());
 
   const thesisText = await readFile(resolve(process.cwd(), options.thesisPath), 'utf-8');
   const thesis = parseThesis(thesisText);
 
-  const { db, client } = createDatabase(config);
   try {
-    const embeddings =
-      config.EMBEDDING_PROVIDER === 'local'
-        ? createLocalEmbeddingProvider()
-        : createDeterministicEmbeddingProvider();
-
     const deps: RunPipelineDeps = {
-      companies: createPostgresCompanyRepository(db),
-      sourceRecords: createPostgresSourceRecordRepository(db),
-      runs: createPostgresRunRepository(db),
-      scoredDeals: createPostgresScoredDealRepository(db),
-      sources: options.sources.map((name) => buildSourceAdapter(name, config)),
-      embeddings,
-      llm: createRulesLlmProvider(),
+      companies: runtime.companies,
+      sourceRecords: runtime.sourceRecords,
+      runs: runtime.runs,
+      scoredDeals: runtime.scoredDeals,
+      sources: runtime.buildSourceAdapters(options.sources),
+      embeddings: runtime.embeddings,
+      llm: runtime.llm,
     };
 
-    const runId = crypto.randomUUID() as RunId;
+    const runId = runtime.newRunId();
     console.log(
-      `Starting run ${runId} — thesis "${thesis.name}" — sources: ${options.sources.join(', ')} — embeddings: ${embeddings.id}`,
+      `Starting run ${runId} — thesis "${thesis.name}" — sources: ${options.sources.join(', ')} — embeddings: ${runtime.embeddings.id}`,
     );
-    if (embeddings.id === 'local-minilm') {
+    if (runtime.embeddings.id === 'local-minilm') {
       console.log(
         '(LocalEmbeddingProvider downloads the model on first run, then works offline.)',
       );
@@ -202,7 +158,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     const companiesById = new Map(result.companies.map((c) => [c.id, c] as const));
     console.log(formatRankedDeals(result.deals, companiesById));
   } finally {
-    await closeDatabase(client);
+    await runtime.close();
   }
 }
 
