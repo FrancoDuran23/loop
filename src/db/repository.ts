@@ -82,7 +82,7 @@ function toSignal(row: typeof signals.$inferSelect): Signal {
   };
 }
 
-function toSourceRecord(row: typeof sourceRecords.$inferSelect): SourceRecord {
+export function toSourceRecord(row: typeof sourceRecords.$inferSelect): SourceRecord {
   return {
     id: row.id as SourceRecordId,
     source: row.source,
@@ -111,7 +111,7 @@ function toSourceRecord(row: typeof sourceRecords.$inferSelect): SourceRecord {
  * explicit that merge "MUST only add rows to company_members" — a stronger,
  * literal requirement that doesn't apply to `signals`.
  */
-async function loadCompany(db: Database, row: typeof companies.$inferSelect): Promise<Company> {
+export async function loadCompany(db: Database, row: typeof companies.$inferSelect): Promise<Company> {
   const [memberRows, absorbedRows] = await Promise.all([
     db
       .select({ sourceRecordId: companyMembers.sourceRecordId })

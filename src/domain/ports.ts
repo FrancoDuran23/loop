@@ -185,3 +185,106 @@ export interface RunRepository {
 export interface ScoredDealRepository {
   saveAll(runId: RunId, d: readonly ScoredDeal[]): Promise<void>;
 }
+
+// ---------------------------------------------------------------------------
+// DealReadModel — the 5th segregated port design.md's D4 decision row named
+// but deliberately left unshaped ("deferred to Phase 9, where it will be
+// pinned by the real endpoint contract"). Pinned now by GET /deals (list,
+// cursor-paginated, filterable) and GET /deals/:id + GET
+// /companies/:id/provenance (detail). A pure API READ concern — no in-memory
+// implementation is provided (see src/api/**'s own tests, which run against
+// a real ephemeral-per-test Postgres via the same integration-test pattern
+// db-test-helper.ts already established for the repository contract suite).
+// ---------------------------------------------------------------------------
+
+/** Opaque-to-the-client pagination cursor. NOT an offset/page number (spec:
+ * "Paginación por cursor, no por offset") — it means "everything after this
+ * exact (score, companyId) position under `ORDER BY score DESC, companyId
+ * ASC`", so results stay stable even if new deals are scored between page
+ * requests (an offset would silently skip or repeat rows as the underlying
+ * result set shifts). The HTTP-facing base64 encode/decode of this shape
+ * lives in src/api/cursor.ts, not here — this port only knows the decoded
+ * structural shape, never the wire encoding. */
+export interface DealCursor {
+  readonly score: number;
+  readonly companyId: CompanyId;
+}
+
+export interface DealListFilter {
+  readonly runId: RunId;
+  readonly minScore?: number;
+  readonly sector?: string;
+  readonly stage?: Stage;
+  readonly limit: number;
+  readonly cursor?: DealCursor;
+}
+
+/** A list-row projection — just enough company context to render a table
+ * row (name/domain/sector/stage) without the full `Company` (signals,
+ * embedding, etc. are unnecessary list-view weight). */
+export interface DealListItem {
+  readonly deal: ScoredDeal;
+  readonly company: Pick<Company, 'id' | 'canonicalName' | 'domain' | 'sector' | 'estimatedStage'>;
+}
+
+export interface DealListPage {
+  readonly items: readonly DealListItem[];
+  /** Present only when more results exist beyond this page. */
+  readonly nextCursor?: DealCursor;
+}
+
+export interface DealDetail {
+  readonly deal: ScoredDeal;
+  readonly company: Company;
+  readonly sourceRecords: readonly SourceRecord[];
+}
+
+/** One field's best-effort provenance reconstruction — see
+ * `getCompanyProvenance`'s own doc comment for the full honesty framing. */
+export interface FieldProvenance {
+  readonly field: 'canonicalName' | 'domain' | 'description' | 'sector' | 'estimatedStage';
+  readonly value: string | undefined;
+  /**
+   * - 'reconstructed-from-source-precedence': value re-derived at READ time
+   *   by applying resolution/resolver.ts's own `resolveFieldConflict`
+   *   source-precedence + most-recent-tiebreak logic over the company's
+   *   member SourceRecords — the SAME algorithm used at merge/attach time
+   *   (pipeline/run.ts's `attachRecordToCompany`), not a stored audit log.
+   * - 'enrichment-not-attributable': `sector`/`estimatedStage` are LLM
+   *   enrichment output (providers/llm/*.ts), never present on any
+   *   `ExtractedCompany` — there is no SourceRecord to honestly attribute
+   *   these to, so none is invented.
+   */
+  readonly method: 'reconstructed-from-source-precedence' | 'enrichment-not-attributable';
+  readonly source?: SourceName;
+  readonly sourceRecordId?: SourceRecordId;
+  /** `ExtractedCompany.url` from the winning record, when present — the
+   * closest honest analogue to a Signal's `evidenceUrl` for a scalar
+   * Company field (Company fields carry no evidenceUrl of their own). */
+  readonly evidenceUrl?: string;
+}
+
+/**
+ * `GET /companies/:id/provenance`'s data source. Per-field write-time
+ * provenance is NOT stored anywhere in this schema (a real domain-model gap,
+ * flagged in Phase 9a's own risk report) — this is a deliberate, DISCLOSED
+ * best-effort reconstruction, not a stored audit log. See FieldProvenance's
+ * `method` field for exactly which honesty tier each field falls into.
+ */
+export interface CompanyProvenance {
+  readonly companyId: CompanyId;
+  readonly fields: readonly FieldProvenance[];
+}
+
+export interface DealReadModel {
+  /** Ranked list for the given run, already sorted `score DESC, companyId
+   * ASC` (the tie-break the cursor itself depends on) — callers should NOT
+   * need to re-sort client-side. */
+  listDeals(filter: DealListFilter): Promise<DealListPage>;
+  /** A single company's deal within one run, or `undefined` if that company
+   * has no `ScoredDeal` row for that run (never scored, or the run doesn't
+   * exist). Callers resolve "latest run" via `RunRepository.findLatestWithDeals`
+   * before calling this — this port has no opinion on which run is latest. */
+  getDeal(runId: RunId, companyId: CompanyId): Promise<DealDetail | undefined>;
+  getCompanyProvenance(companyId: CompanyId): Promise<CompanyProvenance | undefined>;
+}
