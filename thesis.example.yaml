@@ -17,6 +17,16 @@ hard_filters:
     - pre-seed
     - seed
     - series-a
+    # 'unknown' is included deliberately: the default zero-cost
+    # RulesLlmProvider (src/providers/llm/rules.ts) never sets
+    # estimatedStage — it only guesses sector/oneLiner, documented there as
+    # a low-effort, honest default. Without 'unknown' opted in here
+    # (scoring/scorer.ts's own documented escape hatch for "we don't know
+    # this company's stage"), every company would hard-filter to score 0
+    # under the default zero-config bootstrap (spec §18), which would make
+    # this example thesis produce a technically-valid but useless
+    # all-zero ranking out of the box.
+    - unknown
   exclude_sectors:
     - gambling
     - adult
