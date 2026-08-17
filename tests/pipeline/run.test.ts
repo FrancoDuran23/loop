@@ -284,6 +284,113 @@ describe('runPipeline (in-memory, fixtured sources)', () => {
     const all = await deps.companiesRepo.listAll();
     const names = all.map((c) => c.canonicalName).sort();
     expect(names).toEqual(['Fjordwatch', 'Nectarine Robotics']);
+
+    // The survivors must not just persist as companies (already asserted
+    // above) but actually reach the scored, ranked output the caller
+    // consumes -- scoreAndPersist scores off listAll(), so a survivor
+    // that made it into the company set but was somehow excluded from
+    // scoring would be a real regression this alone wouldn't catch.
+    const dealNames = result.deals
+      .map((d) => all.find((c) => c.id === d.companyId)?.canonicalName)
+      .sort();
+    expect(dealNames).toEqual(['Fjordwatch', 'Nectarine Robotics']);
+  });
+
+  it('cross-run matching by NAME ALONE (no domain on either record) does not create a duplicate company', async () => {
+    // Regression test for the blocking-key lookup/storage alignment fixed
+    // in this same batch: computeLookupBlockingKeys (repository-query
+    // side) must use the SAME naive scheme as the keys actually stored on
+    // a Company row, or a second run's name-only candidate would never be
+    // found and would silently create a duplicate company instead of
+    // merging. Deliberately uses TWO SEPARATE runPipeline() calls (not two
+    // records within one run, unlike the merge_incierto test above) to
+    // exercise the storage -> lookup round trip across runs, and
+    // deliberately gives neither record a domain, forcing resolution to
+    // rely on the name4:/trigram blocking keys exclusively.
+    const companiesRepo = createInMemoryCompanyRepository();
+    const sharedDeps = {
+      companies: companiesRepo,
+      sourceRecords: createInMemorySourceRecordRepository(),
+      runs: createInMemoryRunRepository(),
+      scoredDeals: createInMemoryScoredDealRepository(),
+      embeddings: createDeterministicEmbeddingProvider(),
+      llm: createRulesLlmProvider(),
+      logger: silentLogger,
+    };
+
+    await runPipeline(
+      {
+        ...sharedDeps,
+        sources: [
+          fakeAdapter('hackernews', () => [
+            {
+              records: [
+                makeRecord('hackernews', 'hn-quantstack', { name: 'Quantstack', signals: [] }),
+              ],
+            },
+          ]),
+        ],
+      },
+      { runId: crypto.randomUUID() as RunId, thesis: testThesis() },
+    );
+
+    // Re-run with a DIFFERENT adapter set (github instead of hackernews)
+    // against the SAME repository, matching by name similarity only.
+    await runPipeline(
+      {
+        ...sharedDeps,
+        sources: [
+          fakeAdapter('github', () => [
+            {
+              records: [
+                makeRecord('github', 'github-quantstack', { name: 'Quantstack Labs', signals: [] }),
+              ],
+            },
+          ]),
+        ],
+      },
+      { runId: crypto.randomUUID() as RunId, thesis: testThesis() },
+    );
+
+    const all = await companiesRepo.listAll();
+    const canonical = all.filter((c) => c.mergedInto === undefined);
+    const quantstackCompanies = canonical.filter((c) => c.canonicalName.includes('Quantstack'));
+
+    expect(quantstackCompanies).toHaveLength(1);
+    expect(quantstackCompanies[0]!.memberRecordIds.length).toBe(2);
+  });
+
+  it('status is "failed" (not silently swallowed) when persistence throws after ingestion succeeds', async () => {
+    const hn = fakeAdapter('hackernews', () => [
+      { records: [makeRecord('hackernews', 'hn-doomed', { name: 'Doomed Co', signals: [] })] },
+    ]);
+    const deps = makeDeps([hn]);
+    const finishedCalls: Array<{ status: string }> = [];
+    const spyingRuns: RunPipelineDeps['runs'] = {
+      ...deps.runs,
+      async finish(id, status, stats) {
+        finishedCalls.push({ status });
+        await deps.runs.finish(id, status, stats);
+      },
+    };
+    const brokenScoredDeals: RunPipelineDeps['scoredDeals'] = {
+      async saveAll(): Promise<void> {
+        throw new Error('scored_deals write failed');
+      },
+    };
+
+    await expect(
+      runPipeline(
+        { ...deps, runs: spyingRuns, scoredDeals: brokenScoredDeals },
+        { runId: crypto.randomUUID() as RunId, thesis: testThesis() },
+      ),
+    ).rejects.toThrow('scored_deals write failed');
+
+    // A caller polling GET /runs/:id later must see an explicit 'failed'
+    // status, not an ambiguous never-finished run -- runs.finish() must
+    // have been called with 'failed' BEFORE the error was rethrown, not
+    // left silently unfinished.
+    expect(finishedCalls).toEqual([{ status: 'failed' }]);
   });
 
   it('completed status when every source succeeds', async () => {
