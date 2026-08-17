@@ -210,6 +210,25 @@ function resolveObservedAt(fields: RssItemFields): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// URL validation — an RSS <link>/<id> is attacker-influenced text from a
+// public feed this project doesn't control, not a value `rss-parser` (or
+// anything upstream) guarantees is a real http(s) URL. It ends up as
+// ExtractedCompany.url and Signal.evidenceUrl, which src/ui/index.html
+// renders as an <a href>. A javascript: (or data:) URI there would execute
+// on click. Reject anything that isn't genuinely http(s) at the source,
+// rather than relying solely on the UI to defend against it later.
+// ---------------------------------------------------------------------------
+
+function safeHttpUrl(candidate: string): string | undefined {
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Item -> SourceRecord mapping
 // ---------------------------------------------------------------------------
 
@@ -220,7 +239,8 @@ function itemToSourceRecord(
   fetchedAt: string,
 ): SourceRecord {
   const name = fields.title!.trim();
-  const link = fields.link?.trim();
+  const rawLink = fields.link?.trim();
+  const link = rawLink ? safeHttpUrl(rawLink) : undefined;
   const description = fields.contentSnippet?.trim() || fields.summary?.trim();
 
   const signals: Signal[] = [
