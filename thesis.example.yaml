@@ -1,0 +1,44 @@
+# Example investment thesis (spec §8.2 shape). Used by the zero-config
+# bootstrap acceptance run (spec §18): `npm run pipeline -- --thesis
+# thesis.example.yaml`. Reuses spec's own worked example verbatim: "Dev
+# tools B2B, etapa temprana" — devtools/infrastructure/data/ai-tooling
+# sectors, US/LATAM geos. Copy this file and edit it to encode a different
+# thesis; no code change is required (thesis-scoring capability, spec:
+# "changing thesis.yaml changes scoring without a code change").
+name: "Dev tools B2B, etapa temprana"
+description: >
+  Invertimos en herramientas para desarrolladores (devtools, infraestructura,
+  datos, AI tooling) en etapa temprana, con foco en Estados Unidos y America
+  Latina. Buscamos productos open-source-first o developer-first, con
+  tracción orgánica temprana (estrellas en GitHub, actividad en Hacker News,
+  cobertura de prensa) antes que crecimiento pago.
+hard_filters:
+  stages:
+    - pre-seed
+    - seed
+    - series-a
+  exclude_sectors:
+    - gambling
+    - adult
+soft_preferences:
+  sectors:
+    - devtools
+    - infrastructure
+    - data
+    - ai-tooling
+  geos:
+    - US
+    - LATAM
+  keywords:
+    - open-source
+    - developer-first
+    - api-first
+    - self-hosted
+anti_patterns:
+  - "no code in public repo"
+  - "closed-source only"
+weights:
+  semantic: 0.4
+  momentum: 0.3
+  keywords: 0.2
+  recency: 0.1
