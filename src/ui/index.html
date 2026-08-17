@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deal Signal Engine — Ranked Deals</title>
+<!--
+  Spec §10: "una página HTML estática servida desde /ui — tabla ordenada
+  por score, con el breakdown y el rationale expandibles, y links a la
+  evidencia. Sin build step, sin framework." No <script src> to a bundler
+  output, no npm-installed frontend framework — just this one file, served
+  as-is by @hono/node-server's serveStatic (src/api/routes.ts). All API
+  calls below hit the SAME server this file is served from (relative
+  paths), so this works unmodified in dev and against a real deployment.
+-->
+<style>
+  :root { color-scheme: light; }
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 2rem; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  .subtitle { color: #555; margin-top: 0; margin-bottom: 1rem; font-size: 0.9rem; }
+  .controls { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+  button { cursor: pointer; padding: 0.4rem 0.8rem; border: 1px solid #333; background: #fff; border-radius: 4px; }
+  button:hover { background: #f0f0f0; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { border-bottom: 1px solid #ddd; padding: 0.5rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #fafafa; position: sticky; top: 0; }
+  tr:hover td { background: #fbfbfb; }
+  .score { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .flag { display: inline-block; background: #fff3cd; border: 1px solid #e0c46c; border-radius: 3px; padding: 0 0.35rem; font-size: 0.75rem; margin-right: 0.25rem; }
+  .muted { color: #777; }
+  details summary { cursor: pointer; color: #0645ad; }
+  .detail-body { margin-top: 0.5rem; font-size: 0.85rem; }
+  .breakdown-table { border-collapse: collapse; margin: 0.4rem 0; }
+  .breakdown-table td, .breakdown-table th { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  .evidence-list { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+  #status { font-size: 0.85rem; color: #555; }
+  #error-banner { display: none; background: #fdecea; border: 1px solid #f5b5b0; color: #7a1f14; padding: 0.5rem 0.75rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.85rem; }
+  .empty-state { color: #777; padding: 1.5rem 0; }
+</style>
+</head>
+<body>
+  <h1>Deal Signal Engine</h1>
+  <p class="subtitle">Ranked deals from the latest completed pipeline run.</p>
+
+  <div id="error-banner"></div>
+
+  <div class="controls">
+    <button id="refresh-btn" type="button">Refresh</button>
+    <button id="trigger-run-btn" type="button">Trigger new run</button>
+    <span id="status"></span>
+  </div>
+
+  <table id="deals-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Company</th>
+        <th>Score</th>
+        <th>Sector</th>
+        <th>Stage</th>
+        <th>Flags</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody id="deals-tbody">
+      <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+    </tbody>
+  </table>
+
+  <div class="controls" style="margin-top: 1rem;">
+    <button id="load-more-btn" type="button" style="display:none;">Load more</button>
+  </div>
+
+<script>
+  // No framework, no build step — plain fetch()/DOM. Every request below
+  // uses a path RELATIVE to this page (/deals, /deals/:id, /runs, ...), so
+  // this file works against whatever origin actually served it.
+
+  var state = {
+    items: [],
+    nextCursor: null,
+  };
+
+  function el(tag, props, children) {
+    var node = document.createElement(tag);
+    if (props) {
+      Object.keys(props).forEach(function (key) {
+        if (key === 'text') node.textContent = props[key];
+        else if (key === 'html') node.innerHTML = props[key];
+        else node.setAttribute(key, props[key]);
+      });
+    }
+    (children || []).forEach(function (child) { node.appendChild(child); });
+    return node;
+  }
+
+  function showError(message) {
+    var banner = document.getElementById('error-banner');
+    banner.textContent = message;
+    banner.style.display = message ? 'block' : 'none';
+  }
+
+  function setStatus(text) {
+    document.getElementById('status').textContent = text;
+  }
+
+  // Renders the expandable breakdown + rationale + evidence for one
+  // company's full deal detail (GET /deals/:id — spec's "breakdown y
+  // rationale expandibles, y links a la evidencia").
+  function renderDetailBody(detail) {
+    var container = el('div', { class: 'detail-body' });
+
+    var breakdown = detail.deal.breakdown;
+    var table = el('table', { class: 'breakdown-table' });
+    var thead = el('tr', {}, [
+      el('th', { text: 'Component' }),
+      el('th', { text: 'Value' }),
+      el('th', { text: 'Weight' }),
+    ]);
+    table.appendChild(el('thead', {}, [thead]));
+    var tbody = el('tbody');
+    ['semantic', 'momentum', 'keywords', 'recency'].forEach(function (key) {
+      var component = breakdown[key];
+      if (!component) return;
+      tbody.appendChild(el('tr', {}, [
+        el('td', { text: key }),
+        el('td', { text: component.value.toFixed(3) }),
+        el('td', { text: component.weight.toFixed(2) }),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    if (breakdown.failedHardFilter) {
+      container.appendChild(el('p', { text: 'Failed hard filter: ' + breakdown.failedHardFilter }));
+    }
+
+    container.appendChild(el('p', { text: detail.deal.rationale }));
+
+    var evidenceUrls = (detail.signals || [])
+      .filter(function (s) { return s.evidenceUrl; })
+      .map(function (s) { return s; });
+    if (evidenceUrls.length > 0) {
+      container.appendChild(el('strong', { text: 'Evidence:' }));
+      var list = el('ul', { class: 'evidence-list' });
+      evidenceUrls.forEach(function (s) {
+        var link = el('a', { href: s.evidenceUrl, target: '_blank', rel: 'noopener noreferrer' });
+        link.textContent = s.kind + ' (' + s.value + ', ' + s.source + ')';
+        list.appendChild(el('li', {}, [link]));
+      });
+      container.appendChild(list);
+    } else {
+      container.appendChild(el('p', { class: 'muted', text: 'No evidence URLs recorded for this company’s signals.' }));
+    }
+
+    if (detail.sourceRecords && detail.sourceRecords.length > 0) {
+      container.appendChild(el('strong', { text: 'Source records:' }));
+      var srList = el('ul', { class: 'evidence-list' });
+      detail.sourceRecords.forEach(function (r) {
+        srList.appendChild(el('li', { text: r.source + ' / ' + r.sourceId }));
+      });
+      container.appendChild(srList);
+    }
+
+    var provenanceLink = el('p', {}, [
+      el('a', { href: '/companies/' + detail.company.id + '/provenance', target: '_blank', rel: 'noopener noreferrer', text: 'View field provenance →' }),
+    ]);
+    container.appendChild(provenanceLink);
+
+    return container;
+  }
+
+  function renderRow(item, index) {
+    var tr = el('tr');
+    tr.appendChild(el('td', { text: String(index + 1) }));
+
+    var nameCell = el('td');
+    if (item.domain) {
+      var link = el('a', { href: 'https://' + item.domain, target: '_blank', rel: 'noopener noreferrer', text: item.canonicalName });
+      nameCell.appendChild(link);
+    } else {
+      nameCell.textContent = item.canonicalName;
+    }
+    tr.appendChild(nameCell);
+
+    tr.appendChild(el('td', { class: 'score', text: item.score.toFixed(1) }));
+    tr.appendChild(el('td', { text: item.sector || '—' }));
+    tr.appendChild(el('td', { text: item.estimatedStage || '—' }));
+
+    var flagsCell = el('td');
+    (item.flags || []).forEach(function (flag) {
+      flagsCell.appendChild(el('span', { class: 'flag', text: flag }));
+    });
+    tr.appendChild(flagsCell);
+
+    var detailsCell = el('td');
+    var details = el('details');
+    var summary = el('summary', { text: 'Show breakdown' });
+    details.appendChild(summary);
+    var body = el('div', { class: 'detail-body muted', text: 'Loading…' });
+    details.appendChild(body);
+    var loaded = false;
+    details.addEventListener('toggle', function () {
+      if (!details.open || loaded) return;
+      loaded = true;
+      fetch('/deals/' + item.companyId)
+        .then(function (res) {
+          if (!res.ok) throw new Error('Failed to load deal detail (' + res.status + ')');
+          return res.json();
+        })
+        .then(function (detail) {
+          details.removeChild(body);
+          details.appendChild(renderDetailBody(detail));
+        })
+        .catch(function (err) {
+          body.textContent = 'Error loading details: ' + err.message;
+        });
+    });
+    detailsCell.appendChild(details);
+    tr.appendChild(detailsCell);
+
+    return tr;
+  }
+
+  function renderTable() {
+    var tbody = document.getElementById('deals-tbody');
+    tbody.innerHTML = '';
+    if (state.items.length === 0) {
+      tbody.appendChild(el('tr', {}, [el('td', { colspan: '7', class: 'empty-state', text: 'No scored deals yet — trigger a run above.' })]));
+      return;
+    }
+    // Defensive client-side sort by score descending, matching the API's
+    // own documented ordering (GET /deals already returns score DESC,
+    // companyId ASC) — cheap, and keeps the table correct even if a future
+    // API change stops pre-sorting.
+    var sorted = state.items.slice().sort(function (a, b) { return b.score - a.score; });
+    sorted.forEach(function (item, index) {
+      tbody.appendChild(renderRow(item, index));
+    });
+    document.getElementById('load-more-btn').style.display = state.nextCursor ? 'inline-block' : 'none';
+  }
+
+  function loadDeals(append) {
+    var url = '/deals?limit=20' + (append && state.nextCursor ? '&cursor=' + encodeURIComponent(state.nextCursor) : '');
+    setStatus('Loading…');
+    return fetch(url)
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (body) { throw new Error(body.error ? body.error.message : 'Request failed'); });
+        return res.json();
+      })
+      .then(function (data) {
+        showError('');
+        state.items = append ? state.items.concat(data.items) : data.items;
+        state.nextCursor = data.cursor;
+        renderTable();
+        setStatus(data.runId ? 'Run: ' + data.runId : 'No run yet');
+      })
+      .catch(function (err) {
+        showError('Could not load deals: ' + err.message);
+        setStatus('');
+      });
+  }
+
+  function triggerRun() {
+    var btn = document.getElementById('trigger-run-btn');
+    btn.disabled = true;
+    setStatus('Starting run…');
+    fetch('/runs', { method: 'POST' })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (body) { throw new Error(body.error ? body.error.message : 'Request failed'); });
+        return res.json();
+      })
+      .then(function (data) {
+        setStatus('Run ' + data.runId + ' started — polling for completion…');
+        pollRun(data.runId);
+      })
+      .catch(function (err) {
+        showError('Could not trigger a run: ' + err.message);
+      })
+      .finally(function () {
+        btn.disabled = false;
+      });
+  }
+
+  function pollRun(runId, attemptsLeft) {
+    if (attemptsLeft === undefined) attemptsLeft = 60;
+    fetch('/runs/' + runId)
+      .then(function (res) { return res.json(); })
+      .then(function (run) {
+        if (run.status === 'running') {
+          if (attemptsLeft <= 0) {
+            setStatus('Run ' + runId + ' still running (gave up polling).');
+            return;
+          }
+          setStatus('Run ' + runId + ': running…');
+          setTimeout(function () { pollRun(runId, attemptsLeft - 1); }, 3000);
+          return;
+        }
+        setStatus('Run ' + runId + ': ' + run.status);
+        loadDeals(false);
+      })
+      .catch(function () {
+        setStatus('Lost track of run ' + runId + ' status.');
+      });
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', function () { loadDeals(false); });
+  document.getElementById('trigger-run-btn').addEventListener('click', triggerRun);
+  document.getElementById('load-more-btn').addEventListener('click', function () { loadDeals(true); });
+
+  loadDeals(false);
+</script>
+</body>
+</html>

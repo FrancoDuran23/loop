@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "build": "tsc -p tsconfig.build.json",
     "pipeline": "tsx src/cli.ts",
+    "serve": "tsx src/api/server.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "verify:local-embeddings": "tsx scripts/verify-local-embeddings.ts"

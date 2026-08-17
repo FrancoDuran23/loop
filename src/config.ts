@@ -29,6 +29,8 @@ import { z } from 'zod';
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
+const DEFAULT_PORT = 3000;
+
 const envSchema = z.object({
   LLM_PROVIDER: z.enum(['rules', 'ollama']).default('rules'),
   EMBEDDING_PROVIDER: z.enum(['local', 'deterministic']).default('local'),
@@ -38,6 +40,9 @@ const envSchema = z.object({
     .default('postgres://postgres:postgres@localhost:5432/deal_signal_engine'),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
   GITHUB_TOKEN: z.string().min(1).optional(),
+  // Phase 9b: src/api/server.ts's HTTP port. Defaulted (not required) for
+  // the same zero-config bootstrap reason DATABASE_URL is defaulted above.
+  PORT: z.coerce.number().int().positive().default(DEFAULT_PORT),
 });
 
 export type Config = z.infer<typeof envSchema>;

@@ -15,6 +15,19 @@ describe('loadConfig', () => {
       'postgres://postgres:postgres@localhost:5432/deal_signal_engine',
     );
     expect(config.GITHUB_TOKEN).toBeUndefined();
+    // Phase 9b: PORT for src/api/server.ts, defaulted so the API server
+    // also boots with zero env vars set (same fail-fast-with-sane-defaults
+    // philosophy as DATABASE_URL above).
+    expect(config.PORT).toBe(3000);
+  });
+
+  it('honors an explicit PORT override', () => {
+    const config = loadConfig({ PORT: '8080' });
+    expect(config.PORT).toBe(8080);
+  });
+
+  it('throws ConfigValidationError for a non-numeric PORT', () => {
+    expect(() => loadConfig({ PORT: 'not-a-port' })).toThrow(ConfigValidationError);
   });
 
   it('honors explicit valid overrides for every field', () => {
