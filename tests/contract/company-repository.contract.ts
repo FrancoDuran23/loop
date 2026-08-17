@@ -267,5 +267,68 @@ export function runCompanyRepositoryContract(options: CompanyRepositoryContractO
         repo.merge(known.id, unknownId, { pairScore: 0.9, matchedSignals: [], confidence: 'auto' }),
       ).rejects.toThrow(/unknown company id/i);
     });
+
+    // findById / listAll — added by the pipeline-orchestrator phase
+    // (src/pipeline/run.ts): the port originally had no way to (a)
+    // re-fetch a specific company by id (needed to follow `mergedInto`
+    // chains to the current canonical company) or (b) read the full
+    // company set (needed to score every known company, not just ones
+    // touched in the current run). See that phase's apply-progress for
+    // the full rationale.
+    it('findById returns the saved company by id', async () => {
+      const repo = await createRepository();
+      const company = makeCompany({ canonicalName: 'Findable Co' });
+      await repo.save(company);
+
+      const found = await repo.findById(company.id);
+
+      expect(found?.id).toBe(company.id);
+      expect(found?.canonicalName).toBe('Findable Co');
+    });
+
+    it('findById returns undefined for an unknown id', async () => {
+      const repo = await createRepository();
+      const found = await repo.findById(crypto.randomUUID() as CompanyId);
+      expect(found).toBeUndefined();
+    });
+
+    it('findById follows to an absorbed row (caller resolves mergedInto, not the repo)', async () => {
+      const repo = await createRepository();
+      const survivor = makeCompany({ domain: 'findbyid-survivor.com' });
+      const absorbed = makeCompany({ domain: 'findbyid-absorbed.com' });
+      await repo.save(survivor);
+      await repo.save(absorbed);
+      await repo.merge(survivor.id, absorbed.id, {
+        pairScore: 0.9,
+        matchedSignals: ['domain'],
+        confidence: 'auto',
+      });
+
+      const found = await repo.findById(absorbed.id);
+      expect(found?.mergedInto).toBe(survivor.id);
+    });
+
+    it('listAll returns every saved company, including absorbed rows', async () => {
+      const repo = await createRepository();
+      const survivor = makeCompany({ canonicalName: 'ListAll Survivor', domain: 'listall-a.com' });
+      const absorbed = makeCompany({ canonicalName: 'ListAll Absorbed', domain: 'listall-b.com' });
+      await repo.save(survivor);
+      await repo.save(absorbed);
+      await repo.merge(survivor.id, absorbed.id, {
+        pairScore: 0.9,
+        matchedSignals: ['domain'],
+        confidence: 'auto',
+      });
+
+      const all = await repo.listAll();
+      const ids = all.map((c) => c.id);
+
+      expect(ids).toEqual(expect.arrayContaining([survivor.id, absorbed.id]));
+    });
+
+    it('listAll returns an empty array when nothing has been saved', async () => {
+      const repo = await createRepository();
+      expect(await repo.listAll()).toEqual([]);
+    });
   });
 }

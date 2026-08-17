@@ -115,11 +115,32 @@ export interface LlmProvider {
 export interface CompanyRepository {
   findByDomain(domain: string): Promise<Company | undefined>;
   findByBlockingKeys(keys: readonly string[]): Promise<readonly Company[]>;
+  // Added by the pipeline-orchestrator phase (src/pipeline/run.ts) — the
+  // port originally shipped with no way to re-fetch a specific company by
+  // id. That is required for a `resolveCanonical` helper to follow
+  // `mergedInto` chains to the CURRENT canonical company: findByDomain and
+  // findByBlockingKeys only return companies that independently match on
+  // their OWN name/domain, which is not guaranteed for a survivor several
+  // merges removed from whatever matched the original lookup. See the
+  // CompanyRepository doc comment above `merge` for the full mergedInto
+  // contract this method exists to serve.
+  findById(id: CompanyId): Promise<Company | undefined>;
   save(company: Company): Promise<void>; // idempotent upsert by id
   linkSourceRecord(id: CompanyId, rec: SourceRecordId): Promise<void>;
   appendSignals(id: CompanyId, signals: readonly Signal[]): Promise<void>;
   setEmbedding(id: CompanyId, embedding: readonly number[]): Promise<void>;
   merge(survivor: CompanyId, absorbed: CompanyId, ev: MergeEvidence): Promise<void>;
+  // Added by the pipeline-orchestrator phase — thesis scoring (spec §8.3)
+  // must run against the FULL known company set on every run (a company
+  // discovered several runs ago is still a candidate deal), not just
+  // companies touched by the current run's ingestion. Neither
+  // findByDomain nor findByBlockingKeys can produce that set. Returns
+  // EVERY row, including absorbed ones (mergedInto set) — consistent with
+  // findByDomain/findByBlockingKeys's own "return the raw matched row,
+  // caller resolves mergedInto" contract; callers that only want scorable
+  // canonical companies must filter out rows with `mergedInto` set
+  // themselves.
+  listAll(): Promise<readonly Company[]>;
 }
 
 export interface SourceRecordRepository {

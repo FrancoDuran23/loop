@@ -151,6 +151,16 @@ export function createPostgresCompanyRepository(db: Database): CompanyRepository
       return row ? loadCompany(db, row) : undefined;
     },
 
+    async findById(id) {
+      const [row] = await db.select().from(companies).where(eq(companies.id, id)).limit(1);
+      return row ? loadCompany(db, row) : undefined;
+    },
+
+    async listAll() {
+      const rows = await db.select().from(companies);
+      return Promise.all(rows.map((row) => loadCompany(db, row)));
+    },
+
     async findByBlockingKeys(keys) {
       if (keys.length === 0) return [];
       const rows = await db

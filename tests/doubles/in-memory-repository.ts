@@ -82,6 +82,14 @@ export function createInMemoryCompanyRepository(): CompanyRepository {
       return id ? byId.get(id) : undefined;
     },
 
+    async findById(id) {
+      return byId.get(id);
+    },
+
+    async listAll() {
+      return Array.from(byId.values());
+    },
+
     async findByBlockingKeys(keys) {
       const ids = new Set<CompanyId>();
       for (const key of keys) {
