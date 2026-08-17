@@ -207,6 +207,43 @@ describe('DealReadModel (Postgres)', () => {
     expect(seenCompanyIds).toEqual(seeded.map((s) => s.companyId).reverse());
   });
 
+  it('cursor pagination handles a TIED score correctly (the exact case the OR-condition exists for)', async () => {
+    // Regression: a fresh review found the prior version of this test only
+    // ever seeded strictly-decreasing scores, which a naive `score < cursor`
+    // comparison (no companyId tiebreak) would also have passed —
+    // never exercising the one case listDeals's OR-condition
+    // (`score < cursor.score OR (score = cursor.score AND companyId >
+    // cursor.companyId)`) actually exists for. Two companies here share the
+    // identical score 50.
+    const [solo, tieA, tieB] = await Promise.all([
+      seedCompany({ canonicalName: 'Solo High' }),
+      seedCompany({ canonicalName: 'Tie A' }),
+      seedCompany({ canonicalName: 'Tie B' }),
+    ]);
+    const runId = await seedRunWithDeals([
+      { companyId: solo!.companyId, score: 90 },
+      { companyId: tieA!.companyId, score: 50 },
+      { companyId: tieB!.companyId, score: 50 },
+    ]);
+    const readModel = createPostgresDealReadModel(db);
+    const [expectedFirstTie, expectedSecondTie] = [tieA!.companyId, tieB!.companyId].sort();
+
+    const seenCompanyIds: string[] = [];
+    let cursor: { readonly score: number; readonly companyId: CompanyId } | undefined;
+    let pages = 0;
+    do {
+      const page = await readModel.listDeals({ runId, limit: 1, ...(cursor ? { cursor } : {}) });
+      seenCompanyIds.push(...page.items.map((i) => i.company.id));
+      cursor = page.nextCursor;
+      pages += 1;
+      expect(pages).toBeLessThan(10);
+    } while (cursor);
+
+    expect(pages).toBe(3);
+    expect(new Set(seenCompanyIds).size).toBe(3); // no duplicates despite the tie
+    expect(seenCompanyIds).toEqual([solo!.companyId, expectedFirstTie, expectedSecondTie]);
+  });
+
   it('getDeal returns the deal, full company, and its source records', async () => {
     const seeded = await seedCompany({ canonicalName: 'Detail Co', domain: 'detail.example.com' });
     const runId = await seedRunWithDeals([{ companyId: seeded.companyId, score: 77 }]);
